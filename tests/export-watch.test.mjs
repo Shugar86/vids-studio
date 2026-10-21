@@ -73,6 +73,7 @@ test('real isolated MV3 debugger correlates ordinary HTTP, redirect and blob dow
   await writeFile(join(ext,'manifest.json'),JSON.stringify({manifest_version:3,name:'Isolated export watch',version:'1.0',permissions:['debugger','downloads','tabs'],host_permissions:['https://docs.google.com/*'],background:{service_worker:'background.js',type:'module'}}));
   await writeFile(join(ext,'background.js'),`import {createExportWatcher} from './export-watch.js';globalThis.watch=createExportWatcher(chrome);chrome.debugger.onEvent.addListener(watch.onDebuggerEvent);`);
   const child=spawn(chromium.executablePath(),['--headless=new','--no-sandbox','--disable-gpu','--no-first-run','--no-default-browser-check',`--user-data-dir=${profile}`,'--remote-debugging-port=0','--remote-debugging-address=127.0.0.1',`--disable-extensions-except=${ext}`,`--load-extension=${ext}`,'about:blank'],{stdio:['ignore','ignore','pipe']});let browser;
+  const childClosed = new Promise(resolve => child.once('close', resolve));
   try {
     const endpoint=await new Promise((resolve,reject)=>{let text='';const timer=setTimeout(()=>reject(Error('Isolated Chromium did not start')),10000);child.stderr.on('data',b=>{text+=b;const match=text.match(/DevTools listening on (ws:\/\/[^\s]+)/);if(match){clearTimeout(timer);resolve(match[1]);}});child.on('exit',()=>{clearTimeout(timer);reject(Error('Isolated Chromium exited'));});});
     browser=await chromium.connectOverCDP(endpoint,{noDefaults:true});const context=browser.contexts()[0];
@@ -97,7 +98,21 @@ test('real isolated MV3 debugger correlates ordinary HTTP, redirect and blob dow
       assert.equal(await readFile(result.filename,'utf8'),label==='blob'?'blob bytes':'fixture bytes');
     }
     assert.equal(new Set(ids).size,3);
-  }finally{await browser?.close();child.kill('SIGTERM');await new Promise(resolve=>fixtureServer.close(resolve));await rm(root,{recursive:true,force:true});}
+  } finally {
+    try { await browser?.close(); }
+    finally {
+      // A CDP client close disconnects from an externally spawned browser. Wait
+      // for its process to close before removing the profile it is still writing.
+      let forceStop;
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGTERM');
+        forceStop = setTimeout(() => child.kill('SIGKILL'), 5000);
+      }
+      try { await childClosed; } finally { clearTimeout(forceStop); }
+      await new Promise(resolve => fixtureServer.close(resolve));
+      await rm(root, {recursive:true, force:true, maxRetries:5, retryDelay:100});
+    }
+  }
 });
 
 test('empty or origin-only referrers cannot misattribute another tab’s same URL',async()=>{

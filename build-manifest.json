@@ -100,7 +100,7 @@
     "tests/backend_native.py": "3b8342ae1c15d94296bdfb5a64a1fc7e8ab854341c44858e6c223b55d1499688",
     "tests/chrome-storage.mjs": "ae752591e495d8e1f6a7d113dae529ac2133feed66ccad4138466b1a366f9b6f",
     "tests/driver.integration.test.mjs": "f525854dd1252c29de6d689c64a0ebad8e3006fc858e275554497b0410af0f30",
-    "tests/export-watch.test.mjs": "018c3fdd107ff406fa4d36575161ff27cd92b8172c3c4aed5b58486b0e4bf780",
+    "tests/export-watch.test.mjs": "ea42c9400fc37ad83ee15da1c48501756c162fe6296042a566ec7e671a636fd1",
     "tests/extension-load.test.mjs": "bf070c8db6f2bc820cd20df296658ddbb96e6e77cd6bcaf79f3f2d2a4d4da9e7",
     "tests/jobs.test.mjs": "0cff9a4f6139045be33ccf4c62164e354287a5f2d545d8a135d347374789e4f3",
     "tests/live-smoke.test.mjs": "cf2b061896ed51719ecb1751ea584481d3baeb15b64ad011bba8a7ff8a5d7306",
