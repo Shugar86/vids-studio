@@ -1,6 +1,7 @@
 {
   "name": "vids-studio-mcp",
   "version": "0.2.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "A local, Google Vids-only MCP bridge to an explicitly attached Chrome tab",

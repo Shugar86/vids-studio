@@ -201,4 +201,4 @@ cd ../vids-studio-claude
 
 Работаете над кодом с агентом? В [AGENTS.md](https://github.com/Shugar86/vids-studio/blob/main/AGENTS.md) — карта исходников, профили клиентов, проверки и правила публикации на русском и английском. [CLAUDE.md](https://github.com/Shugar86/vids-studio/blob/main/CLAUDE.md) задаёт точку входа для Claude.
 
-**Лицензия:** лицензия этой предварительной версии пока не выбрана. Файл лицензии не включён.
+**Лицензия:** [MIT](LICENSE) · Copyright © 2026 Shugar86.

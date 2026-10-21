@@ -199,4 +199,4 @@ Want to contribute? Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [testing gui
 
 Developing with an agent? [AGENTS.md](https://github.com/Shugar86/vids-studio/blob/main/AGENTS.md) maps the source, client profiles, required checks and publication rules in English and Russian. [CLAUDE.md](https://github.com/Shugar86/vids-studio/blob/main/CLAUDE.md) adds the Claude entry point.
 
-**License:** a license for this preview has not been selected yet. No license file is included.
+**License:** [MIT](LICENSE) · Copyright © 2026 Shugar86.
