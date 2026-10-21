@@ -67,7 +67,7 @@ Run this separately for each profile. A successful SDK smoke confirms the transp
 
 ## Current acceptance boundary
 
-The 0.2 implementation has automated coverage of both profiles and isolated browser mechanisms. The public package deliberately excludes private project content, local installation state and historical film screenshots.
+The 0.3 implementation has automated coverage of both profiles and isolated browser mechanisms. The public package deliberately excludes private project content, local installation state and historical film screenshots.
 
 The following still require explicit live verification with the **current loaded build**:
 
@@ -87,3 +87,7 @@ python3 scripts/build_release.py --output dist
 ```
 
 This creates source, Codex and Claude ZIPs, `SHA256SUMS` and `release-manifest.json`. Dependencies, runtime stores, configuration backups and local work are excluded. Validate the archives, their hashes and both profile installs before publishing. Release creation does not itself create a GitHub release or push source changes.
+
+## Native Windows/macOS CI
+
+Run `python tests/platform_smoke.py` with the Windows dependency installed where applicable. The full regression suite above runs on Linux; native Windows/macOS CI exercises both profiles, installation/rollback, ownership, transport, media and archive reproducibility. It uses a simulated Chrome peer and makes no live Google Vids claim. [Platform guide](platforms.md).

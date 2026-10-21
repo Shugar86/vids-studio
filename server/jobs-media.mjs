@@ -1,6 +1,8 @@
 import {open, unlink} from 'node:fs/promises';
 import {constants} from 'node:fs';
-import {join} from 'node:path';
+import {join, isAbsolute} from 'node:path';
+import {lstat} from 'node:fs/promises';
+import {windowsFileCheck} from './platform-files.mjs';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {jobError, privateDirectory} from './jobs-store.mjs';
@@ -19,14 +21,23 @@ async function command(binary, args, timeoutMs) {
 }
 export async function verifyExport({source, outputDirectory, jobId, maxBytes = 2 * 1024 * 1024 * 1024}) {
   if (typeof jobId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(jobId)) throw jobError('INVALID_JOB_ID', 'Use an opaque job ID.');
-  if (typeof source !== 'string' || !source.startsWith('/') || !/\.mp4$/i.test(source) || source.includes('\0')) throw jobError('INVALID_EXPORT_PATH', 'The correlated download must be an absolute MP4 path.');
+  if (typeof source !== 'string' || !isAbsolute(source) || !/\.mp4$/i.test(source) || source.includes('\0')) throw jobError('INVALID_EXPORT_PATH', 'The correlated download must be an absolute MP4 path.');
   privateDirectory(outputDirectory);
   let input, output; const destination = join(outputDirectory, `${jobId}.mp4`); let created = false;
   try {
+    let checked;
+    if (process.platform === 'win32') { windowsFileCheck('owned-file', source); checked = await lstat(source); }
     input = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const before = await input.stat();
-    if (!before.isFile() || before.uid !== process.getuid() || before.nlink !== 1 || before.size < 1 || before.size > maxBytes) throw jobError('INVALID_EXPORT_FILE', 'Export must be a nonempty owned regular file within the size limit.');
-    output = await open(destination, 'wx', 0o600); created = true;
+    if (!before.isFile() || (process.platform === 'win32' ? (before.dev !== checked.dev || before.ino !== checked.ino) : before.uid !== process.getuid()) || before.nlink !== 1 || before.size < 1 || before.size > maxBytes) throw jobError('INVALID_EXPORT_FILE', 'Export must be a nonempty owned regular file within the size limit.');
+    if (process.platform === 'win32') {
+      windowsFileCheck('create-file', destination); created = true;
+      const expected = await lstat(destination);
+      output = await open(destination, 'r+');
+      const opened = await output.stat();
+      windowsFileCheck('verify-file', destination);
+      if (expected.dev !== opened.dev || expected.ino !== opened.ino) throw jobError('EXPORT_FILE_CHANGED', 'Output file identity changed.');
+    } else { output = await open(destination, 'wx', 0o600); created = true; }
     const hash = createHash('sha256'); let position = 0; const buffer = Buffer.alloc(1024 * 1024);
     while (position < before.size) {
       const {bytesRead} = await input.read(buffer, 0, Math.min(buffer.length, before.size - position), position);
@@ -47,6 +58,11 @@ export async function verifyExport({source, outputDirectory, jobId, maxBytes = 2
     return {path: destination, sha256: hash.digest('hex'), bytes: before.size, durationSeconds: duration, width: video.width, height: video.height,
       streams: probe.streams.map(({index, codec_type, codec_name}) => ({index, type: codec_type, codec: codec_name})),
       verification: {container: 'verified', decode: 'verified', speechText: 'not_checked', sound: 'not_checked', motion: 'not_checked', captions: 'not_checked', viewerClarity: 'not_checked'}};
-  } catch (error) { if (created) await unlink(destination).catch(() => {}); throw error; }
+  } catch (error) {
+    await input?.close().catch(() => {}); input = null;
+    await output?.close().catch(() => {}); output = null;
+    if (created) await unlink(destination).catch(() => {});
+    throw error;
+  }
   finally { await input?.close().catch(() => {}); await output?.close().catch(() => {}); }
 }

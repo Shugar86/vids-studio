@@ -1,5 +1,27 @@
 # Changelog · История изменений
 
+## 0.3.0 — Windows and macOS preview / Windows и macOS
+
+### English
+
+- Native Windows and macOS installation for Codex and Claude Code, with platform-specific Chrome registration, explicit Python launchers and guarded rollback.
+- Windows uses private ACL-protected storage, handle-based document locks and a mutually authenticated loopback transport. Client commands are sent only after the native host proves its identity. Linux/macOS retain private Unix sockets and document fencing.
+- Managed Windows skill copies avoid symlink privileges; media paths, persistent jobs and take-manifest locking support Windows.
+- Native Windows/macOS CI complements the full Linux suites with both profiles, real local processes, isolated installation/rollback, private-state checks, media verification and reproducible packaging.
+- MIT license included in all packages. English/Russian platform guides cover PowerShell, Terminal, updates and verification boundaries.
+
+Live Google Vids acceptance and editorial review remain separate from simulated-peer CI. Existing 0.2.0 archives and checksums are preserved.
+
+### Русский
+
+- Нативная установка на Windows и macOS для Codex и Claude Code: штатная регистрация Chrome, явный путь Python и откат с проверкой последующих изменений.
+- На Windows используются закрытые ACL, блокировки владения документом и loopback с взаимной аутентификацией. Команды передаются только после проверки native host. На Linux/macOS сохраняются закрытые Unix sockets и правила восстановления неизвестных исходов.
+- Управляемые копии навыков Windows не требуют права на symlink; адаптированы пути медиа, постоянные задания и блокировка манифеста дублей.
+- Нативный CI Windows/macOS дополняет полные Linux-проверки: оба клиента, реальные локальные процессы, изолированные установка и откат, права, медиа и воспроизводимость упаковки.
+- MIT включена во все пакеты. Инструкции RU/EN описывают PowerShell, Terminal, обновление и границы подтверждения.
+
+Живая приёмка Google Vids и редакторская оценка остаются отдельными от CI с имитацией браузера. Архивы и контрольные суммы 0.2.0 сохранены.
+
 ## 0.2.0 — public preview / публичная предварительная версия
 
 ### English

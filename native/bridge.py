@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Chrome Native Messaging <-> private local Unix socket; no browser API or exec."""
+"""Chrome Native Messaging <-> private local IPC; no browser API or exec."""
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -19,8 +20,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from coordinator import Coordinator, CoordinationError
+from platform_support import WINDOWS, ensure_private_directory, assert_private_file, secure_open
 
-PROFILE = json.loads((Path(__file__).resolve().parents[1] / "profile.json").read_text())
+PROFILE = json.loads((Path(__file__).resolve().parents[1] / "profile.json").read_text(encoding="utf-8"))
 HOST_RUNTIME = {"profileId": PROFILE["id"], "version": PROFILE["version"], "buildId": PROFILE["buildId"], "protocol": PROFILE["protocol"]}
 EXTENSION_PROTOCOL = PROFILE["extensionProtocol"]
 
@@ -68,12 +70,13 @@ class DiagnosticLog:
         try:
             with self.lock:
                 # Never follow a substituted log path, and refuse shared inodes.
-                fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+                fd = secure_open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
                 try:
                     info = os.fstat(fd)
-                    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+                    if not stat.S_ISREG(info.st_mode) or (not WINDOWS and info.st_uid != os.getuid()) or info.st_nlink != 1:
                         return
-                    os.fchmod(fd, 0o600)
+                    if not WINDOWS:
+                        os.fchmod(fd, 0o600)
                     if info.st_size + len(data) > DIAG_LIMIT:
                         os.ftruncate(fd, 0)
                     os.write(fd, data)
@@ -85,6 +88,8 @@ class DiagnosticLog:
 
 def private_runtime_directory(candidate, uid=None):
     """Accept existing owner-only runtime directories without following a symlink."""
+    if WINDOWS:
+        return False
     if not candidate or not Path(candidate).is_absolute():
         return False
     try:
@@ -98,7 +103,12 @@ def default_socket_path(environ=None):
     env = os.environ if environ is None else environ
     if env.get("VIDS_STUDIO_SOCKET"):
         return Path(env["VIDS_STUDIO_SOCKET"])
+    if WINDOWS:
+        root = Path(env.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
+        return root / "VidsStudio/runtime" / PROFILE["socketNamespace"] / "bridge.json"
     uid = os.getuid()
+    if sys.platform == "darwin":
+        return Path(f"/private/tmp/{PROFILE['socketNamespace']}-{uid}/bridge.sock")
     # MCP clients commonly strip XDG_RUNTIME_DIR from child environments. Use the
     # same Linux user runtime Chrome uses, but only if it really is private.
     for runtime in (env.get("XDG_RUNTIME_DIR"), f"/run/user/{uid}"):
@@ -111,6 +121,10 @@ def default_registry_path(environ=None):
     env = os.environ if environ is None else environ
     if env.get("VIDS_STUDIO_REGISTRY_DIR"):
         return Path(env["VIDS_STUDIO_REGISTRY_DIR"])
+    if WINDOWS:
+        return Path(env.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "VidsStudio/coordinator"
+    if sys.platform == "darwin" and not env.get("XDG_STATE_HOME"):
+        return Path.home() / "Library/Application Support/VidsStudio/coordinator"
     state_home = Path(env["XDG_STATE_HOME"]) if env.get("XDG_STATE_HOME") else Path.home() / ".local/state"
     # Keep unknown Google-side outcomes across OS reboots, not only host restarts.
     # A configured relative/unsafe location is rejected when opened; never fall
@@ -203,8 +217,11 @@ class Bridge:
         self.identity = None
         self.workers = threading.BoundedSemaphore(32)
         self.diagnostics = None
+        self.transport_secret = None
 
     def bind(self):
+        if WINDOWS:
+            return self._bind_windows()
         # Never replace a pre-existing endpoint: it may belong to another profile.
         parent = self.path.parent
         try:
@@ -239,6 +256,68 @@ class Bridge:
             self._unlink_owned()
             raise
 
+    def _bind_windows(self):
+        ensure_private_directory(self.path.parent)
+        if os.path.lexists(self.path):
+            raise FileExistsError("Bridge endpoint already exists; detach the other bridge or inspect the stale descriptor manually")
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        fd = None
+        try:
+            # Never expose a listener outside this computer, or reuse another
+            # listener's address. Endpoint authentication additionally proves
+            # server identity before a client sends any browser capability.
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(16)
+            listener.settimeout(0.25)
+            self.transport_secret = secrets.token_hex(32)
+            descriptor = {"v": 1, "transport": "tcp", "host": "127.0.0.1", "port": listener.getsockname()[1], "token": self.transport_secret}
+            fd = secure_open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+            info = os.fstat(fd)
+            self.identity = (info.st_dev, info.st_ino)
+            os.write(fd, json.dumps(descriptor, separators=(",", ":")).encode("utf-8"))
+            os.fsync(fd)
+            os.close(fd)
+            fd = None
+            self.listener = listener
+            self.diagnostics = DiagnosticLog(self.path.parent / "bridge.log")
+            self.diag("start")
+        except BaseException:
+            if fd is not None:
+                os.close(fd)
+            listener.close()
+            self._unlink_owned()
+            raise
+
+    @staticmethod
+    def _read_line(client, limit):
+        raw = bytearray()
+        while b"\n" not in raw:
+            data = client.recv(min(65536, limit + 1 - len(raw)))
+            if not data:
+                raise EOFError()
+            raw.extend(data)
+            if len(raw) > limit:
+                raise ValueError("Local request exceeds framing limit")
+        first, _, rest = raw.partition(b"\n")
+        if rest.strip():
+            raise ValueError("Only one request is allowed per message")
+        return json.loads(first.decode("utf-8"))
+
+    def _authenticate_windows(self, client):
+        hello = self._read_line(client, 4096)
+        if not isinstance(hello, dict) or hello.get("v") != 1 or hello.get("type") != "transport_hello" or not re.fullmatch(r"[0-9a-f]{64}", str(hello.get("nonce", ""))):
+            raise ValueError("Invalid transport handshake")
+        client_nonce = hello["nonce"]
+        server_nonce = secrets.token_hex(32)
+        def proof(role):
+            return hmac.new(bytes.fromhex(self.transport_secret), f"{role}:{client_nonce}:{server_nonce}".encode("ascii"), hashlib.sha256).hexdigest()
+        client.sendall(json.dumps({"v": 1, "type": "transport_challenge", "nonce": server_nonce, "proof": proof("server")}, separators=(",", ":")).encode("ascii") + b"\n")
+        request = self._read_line(client, MAX_REQUEST)
+        if not isinstance(request, dict) or not hmac.compare_digest(str(request.pop("transportProof", "")), proof("client")):
+            raise PermissionError("Transport authentication failed")
+        return request
+
     def diag(self, event, **fields):
         if self.diagnostics:
             self.diagnostics.write(event, **fields)
@@ -265,18 +344,7 @@ class Bridge:
                 _, uid, _ = struct.unpack("3i", client.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                 if uid != os.getuid():
                     return
-            raw = bytearray()
-            while b"\n" not in raw:
-                data = client.recv(min(65536, MAX_REQUEST + 1 - len(raw)))
-                if not data:
-                    return
-                raw.extend(data)
-                if len(raw) > MAX_REQUEST:
-                    raise ValueError("Local request exceeds framing limit")
-            first, _, rest = raw.partition(b"\n")
-            if rest.strip():
-                raise ValueError("Only one request is allowed per connection")
-            request = json.loads(first.decode("utf-8"))
+            request = self._authenticate_windows(client) if WINDOWS else self._read_line(client, MAX_REQUEST)
             response = self.request(request)
             response.update({"v": LOCAL_PROTOCOL, "type": "response", "id": request.get("id")})
             client.sendall(json.dumps(response, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8") + b"\n")
@@ -287,7 +355,7 @@ class Bridge:
                 client.sendall(json.dumps(response).encode() + b"\n")
             except OSError:
                 pass
-        except OSError:
+        except (OSError, EOFError):
             pass  # A caller leaving does not cancel or replay its browser mutation.
         finally:
             client.close()
@@ -581,7 +649,8 @@ class Bridge:
         if self.identity:
             try:
                 st = self.path.lstat()
-                if stat.S_ISSOCK(st.st_mode) and (st.st_dev, st.st_ino) == self.identity:
+                expected_type = stat.S_ISREG(st.st_mode) if WINDOWS else stat.S_ISSOCK(st.st_mode)
+                if expected_type and (st.st_dev, st.st_ino) == self.identity:
                     self.path.unlink()
             except FileNotFoundError:
                 pass
@@ -611,8 +680,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--socket", type=Path, default=default_socket_path())
     parser.add_argument("--registry", type=Path, default=default_registry_path())
+    parser.add_argument("--parent-window", default=None)  # Chrome supplies this on Windows.
     parser.add_argument("chrome_origin", nargs="?")  # Chrome appends its extension origin.
     args = parser.parse_args()
+    if WINDOWS:
+        import msvcrt
+        msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+        msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
     bridge = Bridge(args.socket, registry_path=args.registry)
     exit_reason = "host_error"
 

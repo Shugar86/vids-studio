@@ -38,17 +38,38 @@ def serialized(value):
 
 def source_mode(path):
     """Use Git/Unix distribution modes, independent of the builder's umask."""
-    return 0o755 if path.stat().st_mode & 0o111 else 0o644
+    # Windows does not preserve Unix executable bits. These two entry points
+    # are executable in every archive, regardless of the build host filesystem.
+    return 0o755 if (path.parent.name, path.name) in {('native', 'bridge.py'), ('server', 'index.mjs')} else 0o644
+
+
+def link_or_reparse(path):
+    try:
+        info = Path(path).lstat()
+    except FileNotFoundError:
+        return False
+    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, 'st_file_attributes', 0) & 0x400)
+
+
+def canonical_root(path):
+    path = Path(path).absolute()
+    if os.name == 'nt':
+        # Resolve only after checking the original spelling; junctions otherwise
+        # disappear into an apparently ordinary destination on another tree.
+        checked_path(Path(path.anchor), path.relative_to(path.anchor))
+    return path.resolve()
 
 
 def checked_path(root, relative):
     """Reject links in any managed path, including directory ancestors."""
     current = root
+    if link_or_reparse(current):
+        raise ValueError(f'Refusing symlink or reparse point in managed root: {current}')
     parts = Path(relative).parts
     for index, part in enumerate(parts):
         current = current / part
-        if current.is_symlink():
-            raise ValueError(f'Refusing symlink in managed path: {current}')
+        if link_or_reparse(current):
+            raise ValueError(f'Refusing symlink or reparse point in managed path: {current}')
         if index < len(parts) - 1 and current.exists() and not current.is_dir():
             raise ValueError(f'Refusing nondirectory managed ancestor: {current}')
     return current
@@ -57,7 +78,7 @@ def checked_path(root, relative):
 def profile_definition(source, profile):
     if profile not in ('codex', 'claude'):
         raise ValueError('Select codex or claude explicitly')
-    value = json.loads(checked_path(source, f'profiles/{profile}.json').read_text())
+    value = json.loads(checked_path(source, f'profiles/{profile}.json').read_text(encoding='utf-8'))
     if value.get('schemaVersion') != 1 or value.get('id') != profile:
         raise ValueError('Invalid profile definition')
     return value
@@ -105,7 +126,7 @@ def source_files(source):
             checked_path(source, relative)
             if relative not in GENERATED:
                 files[relative] = (path.read_bytes(), source_mode(path))
-    for name in ('package.json', 'bun.lock'):
+    for name in ('package.json', 'bun.lock', 'requirements-windows.txt'):
         path = checked_path(source, name)
         if path.exists():
             if path.is_symlink() or not path.is_file():
@@ -134,20 +155,20 @@ def skill_files(source, skill_name):
 
 
 def materialization(source, target, profile):
-    source, target = Path(source).resolve(), Path(target).resolve()
+    source, target = canonical_root(source), canonical_root(target)
     source_identity = checked_path(source, 'profile.json')
-    if source_identity.exists() and json.loads(source_identity.read_text()).get('id') != 'codex':
+    if source_identity.exists() and json.loads(source_identity.read_text(encoding='utf-8')).get('id') != 'codex':
         raise ValueError('Canonical sources must use the codex profile; pass --source with the canonical checkout')
     definition = profile_definition(source, profile)
     if target.exists():
         package = checked_path(target, 'package.json')
-        if not package.is_file() or json.loads(package.read_text()).get('name') != 'vids-studio-mcp':
+        if not package.is_file() or json.loads(package.read_text(encoding='utf-8')).get('name') != 'vids-studio-mcp':
             raise ValueError('Target is not an existing Vids Studio checkout')
         manifest = checked_path(target, 'extension/manifest.json')
-        if manifest.exists() and json.loads(manifest.read_text()).get('key') != definition['extensionKey']:
+        if manifest.exists() and json.loads(manifest.read_text(encoding='utf-8')).get('key') != definition['extensionKey']:
             raise ValueError('Target extension identity differs from the named profile; nothing changed')
         current = checked_path(target, 'profile.json')
-        if current.exists() and json.loads(current.read_text()).get('id') != profile:
+        if current.exists() and json.loads(current.read_text(encoding='utf-8')).get('id') != profile:
             raise ValueError('Target already belongs to another profile')
     files = {**source_files(source), **public_files(source)}
     # Start from the complete selected client: fresh Claude installs must not
@@ -167,14 +188,14 @@ def materialization(source, target, profile):
                 for field in ('key', 'name', 'description'):
                     common.pop(field, None)
                 common.get('action', {}).pop('default_title', None)
-                common['version'] = json.loads((source / 'package.json').read_text())['version']
+                common['version'] = json.loads((source / 'package.json').read_text(encoding='utf-8'))['version']
                 for permission in ('storage', 'downloads'):
                     if permission not in common['permissions']:
                         common['permissions'].append(permission)
                 content = json.dumps(common, sort_keys=True).encode()
             digest.update(name.encode() + b'\0' + content + b'\0')
     build = digest.hexdigest()
-    version = json.loads((source / 'package.json').read_text())['version']
+    version = json.loads((source / 'package.json').read_text(encoding='utf-8'))['version']
     runtime = {**definition, 'version': version, 'buildId': build, 'coreBuildId': build,
                'protocol': 3, 'extensionProtocol': 2}
     files['profile.json'] = (serialized(runtime).encode(), 0o644)
@@ -206,7 +227,7 @@ def materialization(source, target, profile):
         path = checked_path(target, name)
         if path.is_symlink() or (path.exists() and not path.is_file()):
             raise ValueError(f'Refusing nonregular target: {path}')
-        if not path.exists() or path.read_bytes() != content or stat.S_IMODE(path.stat().st_mode) != mode:
+        if not path.exists() or path.read_bytes() != content or (os.name != 'nt' and stat.S_IMODE(path.stat().st_mode) != mode):
             changes.append(name)
             before[name] = (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) if path.exists() else None
     return {'source': source, 'target': target, 'profile': profile, 'coreBuildId': build,
@@ -225,7 +246,8 @@ def write(plan):
             fd, temporary = tempfile.mkstemp(prefix='.vids-build-', dir=path.parent)
             content, mode = plan['files'][name]
             with os.fdopen(fd, 'wb') as stream:
-                os.fchmod(stream.fileno(), mode)
+                if os.name != 'nt':
+                    os.fchmod(stream.fileno(), mode)
                 stream.write(content)
             pending.append((name, path, Path(temporary)))
         for name, path, _ in pending:

@@ -61,8 +61,8 @@ def archive_bytes(prefix, files):
 
 
 def artifacts(source):
-    source = Path(source).resolve()
-    package = json.loads(profiles.checked_path(source, 'package.json').read_text())
+    source = profiles.canonical_root(source)
+    package = json.loads(profiles.checked_path(source, 'package.json').read_text(encoding='utf-8'))
     version = package['version']
     if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', version):
         raise ValueError('Package version is not safe for release filenames')
@@ -112,7 +112,8 @@ def write_artifacts(output, files):
                 raise ValueError(f'Release destination must be a regular file: {target}')
             fd, path = tempfile.mkstemp(prefix='.vids-release-', dir=output)
             with os.fdopen(fd, 'wb') as stream:
-                os.fchmod(stream.fileno(), 0o644)
+                if os.name != 'nt':
+                    os.fchmod(stream.fileno(), 0o644)
                 stream.write(content)
             temporary.append((Path(path), target))
         for path, target in temporary:

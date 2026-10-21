@@ -2,11 +2,13 @@ import {DatabaseSync} from 'node:sqlite';
 import {mkdirSync, lstatSync, openSync, closeSync, chmodSync, unlinkSync} from 'node:fs';
 import {join, resolve, parse} from 'node:path';
 import {createHash, timingSafeEqual} from 'node:crypto';
+import {windowsFileCheck} from './platform-files.mjs';
 
 export function jobError(code, message) { const error = new Error(message); error.code = code; return error; }
 export function tokenHash(token) { return createHash('sha256').update(token).digest('hex'); }
 export function privateDirectory(directory) {
   const absolute = resolve(directory);
+  if (process.platform === 'win32') { windowsFileCheck('ensure-directory', absolute); return absolute; }
   let current = parse(absolute).root;
   for (const part of absolute.slice(current.length).split('/').filter(Boolean)) {
     current = join(current, part);
@@ -20,25 +22,35 @@ export function privateDirectory(directory) {
   if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid() || (info.mode & 0o777) !== 0o700) throw jobError('UNSAFE_JOB_STORE', 'Jobs require an owned, non-symlink 0700 directory.');
   return absolute;
 }
+function assertPrivateFile(file, info) {
+  if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) throw jobError('UNSAFE_JOB_STORE', 'Job storage must be a regular file with one link.');
+  if (process.platform === 'win32') windowsFileCheck('verify-file', file);
+  else if (info.uid !== process.getuid() || (info.mode & 0o777) !== 0o600) throw jobError('UNSAFE_JOB_STORE', 'Job database must be an owned 0600 regular file.');
+}
+
 export class JobStore {
   constructor(directory, {now = Date.now, retentionMs = 7 * 86400000, maxJobs = 500} = {}) {
     this.directory = privateDirectory(directory); this.now = now; this.retentionMs = retentionMs; this.maxJobs = maxJobs;
     this.resultsDirectory = privateDirectory(join(this.directory, 'results'));
     const file = join(this.directory, 'jobs.sqlite');
-    try { closeSync(openSync(file, 'wx', 0o600)); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    if (process.platform === 'win32') windowsFileCheck('ensure-file', file);
+    else {
+      try { closeSync(openSync(file, 'wx', 0o600)); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    }
     const info = lstatSync(file);
-    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.uid !== process.getuid() || (info.mode & 0o777) !== 0o600) throw jobError('UNSAFE_JOB_STORE', 'Job database must be an owned 0600 regular file.');
+    assertPrivateFile(file, info);
     this.file = file; this.fileIdentity = {dev: info.dev, ino: info.ino};
     this.db = new DatabaseSync(file);
     this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, profile TEXT NOT NULL, document TEXT NOT NULL, intent TEXT NOT NULL, state TEXT NOT NULL, updated INTEGER NOT NULL, body TEXT NOT NULL, UNIQUE(profile,intent));
       CREATE UNIQUE INDEX IF NOT EXISTS one_export_per_document ON jobs(profile,document) WHERE state IN ('queued','running','waiting','needs_reconciliation');`);
-    chmodSync(file, 0o600);
+    if (process.platform !== 'win32') chmodSync(file, 0o600);
   }
   assertSafe() {
     privateDirectory(this.directory); privateDirectory(this.resultsDirectory);
     const info = lstatSync(this.file);
-    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.uid !== process.getuid() || (info.mode & 0o777) !== 0o600 || info.dev !== this.fileIdentity.dev || info.ino !== this.fileIdentity.ino) throw jobError('UNSAFE_JOB_STORE', 'Persistent job storage changed identity or permissions.');
+    assertPrivateFile(this.file, info);
+    if (info.dev !== this.fileIdentity.dev || info.ino !== this.fileIdentity.ino) throw jobError('UNSAFE_JOB_STORE', 'Persistent job storage changed identity.');
   }
   prune() {
     this.assertSafe();
@@ -47,7 +59,7 @@ export class JobStore {
       const expected = join(this.resultsDirectory, `${row.id}.mp4`);
       this.db.prepare('DELETE FROM jobs WHERE id=?').run(row.id);
       {
-        try { const info = lstatSync(expected); if (info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && info.uid === process.getuid()) unlinkSync(expected); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        try { const info = lstatSync(expected); assertPrivateFile(expected, info); unlinkSync(expected); } catch (error) { if (error.code !== 'ENOENT') throw error; }
       }
     }
   }

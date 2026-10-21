@@ -2,7 +2,7 @@
 
 This public record distinguishes source tests, loaded runtime and live Google Vids acceptance. See the reproducible [English testing guide](docs/en/testing.md) or [русское руководство](docs/ru/testing.md).
 
-## Evidence boundary — 0.2.0
+## Evidence boundary — 0.3.0
 
 | Layer | Scope |
 | --- | --- |
@@ -15,8 +15,14 @@ The export fixture supplies a full document referrer and uses local HTTP, redire
 
 Public tests contain no private film assets or user-profile state. Test counts and environment-specific results belong to the corresponding CI run or release notes; the presence of this file does not claim that a future checkout passed.
 
-## Граница свидетельств — 0.2.0
+## Граница свидетельств — 0.3.0
 
 Автоматические проверки подтверждают локальные механизмы в описанных условиях. Они не означают, что пользователь перезагрузил расширения, текущий Google Vids сохранил интерфейс или качество нового ролика уже проверено. `--check` проверяет файлы; diagnostics — загруженные версии; live smoke — чтение явно указанного документа.
 
 Живое принятие typed-экспорта MP4 ещё ожидается. Fixture с полным referrer не выдаётся за поведение Google. Проверка генерации, звука, движения, субтитров и зрительской ясности нужна для каждого нового результата. [Поведение и ограничения экспорта](docs/ru/jobs.md).
+
+## Native platform checks / Нативные проверки платформ
+
+Version 0.3 adds Windows and macOS CI for both profiles. `python tests/platform_smoke.py` exercises isolated setup/rollback, native transport, document arbitration, protected local state, media and packaging. Check the exact commit’s [CI result](https://github.com/Shugar86/vids-studio/actions); these checks simulate the Chrome peer and do not establish live Google Vids acceptance.
+
+Версия 0.3 добавляет CI Windows и macOS для обоих профилей. Проверяются изолированная установка и откат, транспорт, владение документом, закрытое локальное состояние, медиа и упаковка. Смотрите CI конкретного commit: имитация Chrome не заменяет живую приёмку Google Vids.

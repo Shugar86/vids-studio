@@ -1,6 +1,6 @@
 import {randomUUID, createHash} from 'node:crypto';
 import {join} from 'node:path';
-import {homedir} from 'node:os';
+import {stateHome} from './platform-files.mjs';
 import {JobStore, jobError, tokenHash} from './jobs-store.mjs';
 import {verifyExport} from './jobs-media.mjs';
 
@@ -196,7 +196,7 @@ export class ExportJobs {
   close() { this.store.close(); }
 }
 
-export function registerJobTools(server, {z, bridgeRequest, PROFILE, directory = join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'vids-studio-jobs', PROFILE.id)}) {
+export function registerJobTools(server, {z, bridgeRequest, PROFILE, directory = join(stateHome(), 'vids-studio-jobs', PROFILE.id)}) {
   let jobs;
   const service = () => jobs ||= new ExportJobs({directory, bridgeRequest, profile: PROFILE});
   const access = {jobId: z.string().uuid(), jobToken: z.string().min(32).max(128)};

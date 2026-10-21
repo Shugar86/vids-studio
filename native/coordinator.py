@@ -1,6 +1,5 @@
 """Private cross-profile document arbitration; a dead PID is never a fence."""
 import contextlib
-import fcntl
 import hashlib
 import os
 from pathlib import Path
@@ -9,6 +8,7 @@ import sqlite3
 import stat
 import time
 from dataclasses import dataclass
+from platform_support import WINDOWS, ensure_private_directory, assert_private_file, secure_open, lock_file
 
 
 RESOLVED_RETENTION_SECONDS = 30 * 86400
@@ -35,29 +35,14 @@ class Lease:
 
 
 def private_directory(path):
-    path = Path(path)
-    if not path.is_absolute():
-        raise CoordinationError("COORDINATOR_UNAVAILABLE", "Coordinator path must be absolute")
-    # Walk rather than mkdir(parents=True): never follow an existing symlink or
-    # create persistent state beneath a directory writable by another user.
-    # Root-owned sticky /tmp is allowed for explicitly isolated test overrides.
-    for directory in [*reversed(path.parents), path]:
-        try:
-            directory.mkdir(mode=0o700)
-        except FileExistsError:
-            pass
-        info = directory.lstat()
-        sticky_root = info.st_uid == 0 and bool(info.st_mode & stat.S_ISVTX)
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, os.getuid()) or (info.st_mode & 0o022 and not sticky_root):
-            raise CoordinationError("COORDINATOR_UNAVAILABLE", "Coordinator ancestors must be trusted, non-symlink directories")
-    info = path.lstat()
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
-        raise CoordinationError("COORDINATOR_UNAVAILABLE", "Coordinator directory must be owned, non-symlink and 0700")
-    return path
+    try:
+        return ensure_private_directory(path)
+    except (OSError, ValueError) as exc:
+        raise CoordinationError("COORDINATOR_UNAVAILABLE", "Coordinator storage must remain private and owned") from exc
 
 
 class Coordinator:
-    """flock fences live hosts; durable generations fence hosts after a crash.
+    """OS locks fence live hosts; durable generations fence hosts after a crash.
 
     Releasing an OS lock on death is not proof that Chrome stopped executing.
     Only a receipt from the old profile's extension makes a crashed generation
@@ -73,12 +58,13 @@ class Coordinator:
             return
         private_directory(self.directory)
         path = self.directory / "registry.sqlite3"
-        fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        fd = secure_open(path, os.O_CREAT | os.O_RDWR, 0o600)
         try:
             info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+            if not stat.S_ISREG(info.st_mode) or (not WINDOWS and info.st_uid != os.getuid()) or info.st_nlink != 1:
                 raise CoordinationError("COORDINATOR_UNAVAILABLE", "Unsafe coordinator registry")
-            os.fchmod(fd, 0o600)
+            if not WINDOWS:
+                os.fchmod(fd, 0o600)
         finally:
             os.close(fd)
         with contextlib.closing(sqlite3.connect(path, timeout=5)) as db, db:
@@ -107,9 +93,10 @@ class Coordinator:
     def _transaction(self):
         self._initialize()
         private_directory(self.directory)
-        info = (self.directory / "registry.sqlite3").lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600:
-            raise CoordinationError("COORDINATOR_UNAVAILABLE", "Persistent registry must remain an owned, non-symlink 0600 file")
+        try:
+            assert_private_file(self.directory / "registry.sqlite3")
+        except OSError as exc:
+            raise CoordinationError("COORDINATOR_UNAVAILABLE", "Persistent registry must remain private and owned") from exc
         with contextlib.closing(sqlite3.connect(self.directory / "registry.sqlite3", timeout=5)) as db, db:
             db.row_factory = sqlite3.Row
             db.execute("PRAGMA synchronous=FULL")
@@ -166,14 +153,15 @@ class Coordinator:
     def _lock(self, key):
         self._initialize()
         private_directory(self.directory)
-        fd = os.open(self.directory / f"{key}.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        fd = secure_open(self.directory / f"{key}.lock", os.O_CREAT | os.O_RDWR, 0o600)
         try:
             info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+            if not stat.S_ISREG(info.st_mode) or (not WINDOWS and info.st_uid != os.getuid()) or info.st_nlink != 1:
                 raise CoordinationError("COORDINATOR_UNAVAILABLE", "Unsafe coordinator lock")
-            os.fchmod(fd, 0o600)
+            if not WINDOWS:
+                os.fchmod(fd, 0o600)
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_file(fd)
             except BlockingIOError as exc:
                 raise CoordinationError("CONTROL_BUSY", "Another managed profile owns this document") from exc
             return fd

@@ -7,7 +7,7 @@ Vids Studio is local infrastructure for an AI client to operate one user-selecte
 ```mermaid
 flowchart LR
     A[Codex / Claude Code] <-->|MCP stdio| B[Node MCP server]
-    B <-->|Private Unix socket| C[Python native host]
+    B <-->|Private local transport| C[Python native host]
     C <-->|Chrome Native Messaging| D[Chrome extension]
     D <-->|Tab-local debugger commands| E[Explicitly attached Vids tab]
     C <--> F[(Shared document coordinator)]
@@ -59,7 +59,7 @@ A delayed status response is also bound to its generation. It cannot restore an 
 
 ## Data and storage
 
-The connector opens no public TCP listener and runs no hosted backend. Local transport uses stdio, Native Messaging and a private Unix socket. No Google OAuth client or model API credential is required by this bridge.
+The connector opens no public TCP listener and runs no hosted backend. Local transport uses stdio and Native Messaging; Linux/macOS use a private Unix socket, while Windows uses IPv4 loopback with a mutual HMAC handshake. A fresh per-host secret is stored in an owner-private descriptor. Client commands are sent only after the host proves possession; the secret is never sent on the connection. No Google OAuth client or model API credential is required by this bridge.
 
 That does **not** mean the entire workflow is offline. Google Vids contacts Google normally. Explicit uploads send selected files to Google. UI observations and screenshots are returned to Codex or Claude Code and are handled according to that client's configuration and service terms.
 
@@ -71,7 +71,7 @@ That does **not** mean the entire workflow is offline. Google Vids contacts Goog
 | Setup rollback | `.runtime/install-backups/` inside the installation |
 | Take archive | Beside the explicitly chosen manifest; retain it together with the manifest |
 
-Private runtime directories are created as 0700, private files as 0600; unsafe filesystem identities fail closed rather than silently loosening permissions. Raw control/job capabilities are not persisted; hashes support checks. The diagnostic log records bounded method/phase/code/time metadata, not page text, capability values, media paths or raw browser errors.
+On Linux/macOS, private runtime directories are created as 0700 and private files as 0600. Windows validates owner-private ACLs and rejects reparse points; unsafe filesystem identities fail closed rather than silently loosening permissions. Raw control/job capabilities are not persisted; hashes support checks. The diagnostic log records bounded method/phase/code/time metadata, not page text, capability values, media paths or raw browser errors.
 
 Resolved coordinator history is bounded by age/count; unresolved actions and required fences are preserved. Job retention is capped at 500 records, with terminal jobs and their private copies pruned after seven days on a later start. Retain needed exports elsewhere before expiry. Read [jobs](jobs.md) for full behavior. Rollback records can contain private configuration bytes and must stay private.
 
@@ -84,3 +84,5 @@ Chrome and the attached document must remain open. Background-window operation d
 Export attribution relies on deprecated CDP Page download events plus Chrome download events and a full document referrer. It has specific unsupported cases; see [export limitations](jobs.md). Google can change UI labels, structure and feature availability independently of this repository.
 
 References: [Chrome debugger API](https://developer.chrome.com/docs/extensions/reference/api/debugger), [Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging), [downloads API](https://developer.chrome.com/docs/extensions/reference/api/downloads). The implementation and its tests define this project's supported behavior; general API documentation does not prove a live Vids workflow passed.
+
+Windows keeps persistent state below `%LOCALAPPDATA%/VidsStudio`; macOS uses `~/Library/Application Support/VidsStudio`. The socket/descriptor and coordinator are profile-aware; the coordinator is shared between clients. See [platform setup](platforms.md).

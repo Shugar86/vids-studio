@@ -8,11 +8,11 @@
 
 <p align="center">
   <a href="https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml"><img src="https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml/badge.svg" alt="Проверка обоих профилей"></a>
-  <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0%20preview-ffb19e" alt="v0.2.0 preview"></a>
-  <img src="https://img.shields.io/badge/platform-Linux-a8e4d0" alt="Платформа: Linux">
+  <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/release-v0.3.0%20preview-ffb19e" alt="v0.3.0 preview"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-a8e4d0" alt="Windows, macOS и Linux">
 </p>
 
-<p align="center"><a href="#начало-работы">Установить</a> · <a href="#для-каких-задач">Возможности</a> · <a href="#как-это-работает">Как это работает</a> · <a href="docs/ru/usage.md">Руководство</a> · <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.2.0">Скачать</a></p>
+<p align="center"><a href="#начало-работы">Установить</a> · <a href="#для-каких-задач">Возможности</a> · <a href="#как-это-работает">Как это работает</a> · <a href="docs/ru/usage.md">Руководство</a> · <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0">Скачать</a></p>
 
 ## Ваш ролик остаётся в редакторе
 
@@ -62,19 +62,21 @@ Vids Studio подключает Codex или Claude Code к **тому доку
 
 Оба профиля могут независимо работать с разными документами. Если они обращаются к одному документу, одна задача получает управление, а другая — `CONTROL_BUSY`; для этого в обоих профилях должна работать обновлённая версия. Ручное редактирование остаётся доступным. Если исход действия неизвестен, агент должен выяснить его перед продолжением, а не повторять действие вслепую.
 
-**Куда уходят данные.** Коннектор работает локально через закрытый Unix socket: не открывает публичный TCP-сервис, не читает cookie и пароли, не ищет посторонние вкладки. Наблюдения редактора и снимки экрана поступают вашему AI-клиенту. Google Vids продолжает отправлять Google обычные запросы редактора и загружаемые медиа. Разрешение Chrome `debugger` широкое; ограничение выбранным документом обеспечивает код этой реализации. [Архитектура, разрешения и восстановление →](docs/ru/architecture.md)
+**Куда уходят данные.** Коннектор работает локально: на Linux/macOS через закрытый Unix socket, на Windows — через loopback с взаимной аутентификацией; не открывает публичный TCP-сервис, не читает cookie и пароли, не ищет посторонние вкладки. Наблюдения редактора и снимки экрана поступают вашему AI-клиенту. Google Vids продолжает отправлять Google обычные запросы редактора и загружаемые медиа. Разрешение Chrome `debugger` широкое; ограничение выбранным документом обеспечивает код этой реализации. [Архитектура, разрешения и восстановление →](docs/ru/architecture.md)
 
 ## Начало работы
 
-**Поддерживаемая платформа установки — Linux.** Нужны Node.js **22.13+**, Python **3.11+**, Bun, Google Chrome **118+**, собственная установка Codex или Claude Code и доступ к Google Vids. Для проверки экспорта и медиа-помощников нужны FFmpeg/ffprobe. Указанные минимальные версии не означают, что проверено каждое сочетание. Самому мосту не нужны отдельный API-ключ модели и приложение Google OAuth.
+**Установка: Windows, macOS и Linux (preview).** Нужны Node.js **22.13+**, Python **3.11+**, Bun, Google Chrome **118+**, собственная установка Codex или Claude Code и доступ к Google Vids. Для проверки экспорта и медиа-помощников нужны FFmpeg/ffprobe. Указанные минимальные версии не означают, что проверено каждое сочетание. Самому мосту не нужны отдельный API-ключ модели и приложение Google OAuth.
 
-Выберите архив клиента в [предварительном релизе v0.2.0](https://github.com/Shugar86/vids-studio/releases/tag/v0.2.0):
+Выберите архив клиента в [предварительном релизе v0.3.0](https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0):
 
 | Codex | Claude Code | Разработка |
 | --- | --- | --- |
-| [Скачать ZIP для Codex](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/vids-studio-0.2.0-codex.zip) | [Скачать ZIP для Claude](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/vids-studio-0.2.0-claude.zip) | [Скачать исходники](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/vids-studio-0.2.0-source.zip) |
+| [Скачать ZIP для Codex](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-codex.zip) | [Скачать ZIP для Claude](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-claude.zip) | [Скачать исходники](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-source.zip) |
 
-Сверьте загрузку с [SHA256SUMS](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/SHA256SUMS). Распакуйте выбранный профиль в **постоянный каталог**. Зависимости устанавливаются отдельно. Откройте инструкцию для своего клиента:
+Сверьте загрузку с [SHA256SUMS](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/SHA256SUMS). Распакуйте выбранный профиль в **постоянный каталог**. Зависимости устанавливаются отдельно. Откройте инструкцию для своего клиента:
+
+**Windows:** используйте [команды PowerShell](docs/ru/platforms.md#windows--powershell) с отдельным Python-окружением. Команды ниже — для Linux/macOS. [Различия платформ и проверки →](docs/ru/platforms.md)
 
 <details>
 <summary><strong>Настроить Codex</strong></summary>
@@ -164,7 +166,7 @@ cd ../vids-studio-claude
 
 Автоматические проверки охватывают оба профиля: установку и упаковку, связь MCP и native host, владение документом, ввод в браузере, загрузку медиа, обработку экспорта и локальные помощники. Браузерные проверки работают в отдельных временных профилях с локальными тестовыми материалами и не затрагивают настоящий проект пользователя. [Запуски CI](https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml) показывают результаты конкретных версий кода.
 
-**v0.2.0 — предварительная версия.** Задание `export_mp4` реализовано и проверено в изолированном браузере; приёмка на текущем живом экспорте Google Vids ещё ожидается. Если принадлежность загрузки документу не подтверждается, процесс останавливается для сверки состояния. Сам по себе корректный MP4 также не подтверждает, что голос, движение и история были проверены. [Подробности экспорта](docs/ru/jobs.md) · [Границы проверки](docs/ru/testing.md)
+**v0.3.0 — предварительная версия.** Задание `export_mp4` реализовано и проверено в изолированном браузере; приёмка на текущем живом экспорте Google Vids ещё ожидается. Если принадлежность загрузки документу не подтверждается, процесс останавливается для сверки состояния. Сам по себе корректный MP4 также не подтверждает, что голос, движение и история были проверены. [Подробности экспорта](docs/ru/jobs.md) · [Границы проверки](docs/ru/testing.md)
 
 Это независимый неофициальный проект. Он не предоставляет API сцен Google Vids, не включает доступ к Google AI и не обходит ограничения аккаунта. Google может менять редактор; Chrome и подключённый документ должны оставаться открытыми.
 

@@ -1,0 +1,3 @@
+# Windows ACL APIs; install using the same Python selected for setup.py.
+# pywin32 keeps its own PSF-2.0 license and is not bundled in the release ZIP.
+pywin32==312; sys_platform == "win32"

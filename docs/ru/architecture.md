@@ -7,7 +7,7 @@ Vids Studio — локальная инфраструктура, через ко
 ```mermaid
 flowchart LR
     A[Codex / Claude Code] <-->|MCP stdio| B[Node MCP server]
-    B <-->|Закрытый Unix socket| C[Python native host]
+    B <-->|Закрытый локальный транспорт| C[Python native host]
     C <-->|Chrome Native Messaging| D[Расширение Chrome]
     D <-->|Debugger внутри вкладки| E[Явно подключённый Vids]
     C <--> F[(Общий координатор документа)]
@@ -59,7 +59,7 @@ Native coordinator объединяет закрытый SQLite registry с бл
 
 ## Данные и хранение
 
-Коннектор не открывает публичный TCP-порт и не запускает облачный backend. Локальный транспорт — stdio, Native Messaging и закрытый Unix socket. Самому мосту не нужны Google OAuth client или ключ API модели.
+Коннектор не открывает публичный TCP-порт и не запускает облачный backend. Локальный транспорт — stdio и Native Messaging. На Linux/macOS используется закрытый Unix socket, на Windows — IPv4 loopback с взаимной HMAC-аутентификацией. Свежий секрет native host хранится в закрытом файле; команды отправляются только после проверки host, сам секрет по соединению не передаётся. Самому мосту не нужны Google OAuth client или ключ API модели.
 
 Это **не** делает весь процесс офлайн. Google Vids общается с Google обычным образом; выбранные для upload файлы отправляются Google. Наблюдения и снимки передаются Codex или Claude Code и обрабатываются согласно настройкам и условиям соответствующего клиента.
 
@@ -84,3 +84,5 @@ Chrome и подключённый документ должны остават�
 Сопоставление экспорта использует устаревающие CDP Page download events, события загрузки Chrome и полный referrer документа. Есть конкретные неподдерживаемые случаи: см. [ограничения экспорта](jobs.md). Google может независимо менять подписи, структуру UI и доступность возможностей.
 
 Источники: [Chrome debugger API](https://developer.chrome.com/docs/extensions/reference/api/debugger), [Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging), [downloads API](https://developer.chrome.com/docs/extensions/reference/api/downloads). Поддерживаемое поведение проекта задают реализация и тесты; общая API-справка не доказывает успешный живой процесс в Vids.
+
+На Windows вместо POSIX modes проверяются владелец и закрытые ACL; reparse points отклоняются. Состояние хранится в `%LOCALAPPDATA%/VidsStudio`, на macOS — в `~/Library/Application Support/VidsStudio`. Координатор общий для обоих клиентов. [Установка по платформам](platforms.md).

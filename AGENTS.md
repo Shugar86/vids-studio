@@ -40,7 +40,7 @@ Vids Studio связывает Codex или Claude Code с одной явно �
 | --- | --- |
 | Документация, графика | Ссылки и наличие assets, визуальная проверка страницы, согласованность RU/EN; обновление и `--check` manifest для управляемых файлов |
 | Навык или helper | Тесты затронутого helper, проверки обоих wrappers и полноты свежих профилей; примеры без обращения к живым сервисам |
-| Runtime, протокол, extension | Полный `bun run test` в исходнике и свежем Claude-профиле с явным canonical source; профильные skill-тесты и релевантный regression case |
+| Runtime, протокол, extension | Полный `bun run test` в исходнике и свежем Claude-профиле с явным canonical source; профильные skill-тесты и релевантный regression case; `python tests/platform_smoke.py` на Windows/macOS при изменении переносимого runtime |
 | Сборщик, setup, релиз | Свежие Codex **и** Claude; `--check`, setup в изолированных каталогах, тесты профилей/setup/архивов; состав ZIP, контрольные суммы и повторяемость сборки |
 
 Команды ниже запускаются из корня исходника. Подробности и границы проверок — в [testing](docs/ru/testing.md). Отдельно сообщайте: проверенный исходник, фактически загруженный runtime и живую приёмку. Ни сборка, ни замена файлов не доказывают загрузку нового кода клиентом. Экспорт 0.2 остаётся preview до проверки текущей сборки в реальном Vids; локальная фикстура не доказывает наличие полного referrer у Google. Качество видео и работа конкретной модели требуют собственных свидетельств.
@@ -85,7 +85,7 @@ The builder generates `profile.json`, `extension/profile.js` and `build-manifest
 | --- | --- |
 | Docs and graphics | Valid links and assets, visual page review, EN/RU parity; regenerate and `--check` the manifest for managed files |
 | Skill or helper | Affected helper tests, both wrappers and complete fresh profiles; examples without live service calls |
-| Runtime, protocol or extension | Full `bun run test` in source and a fresh Claude profile with explicit canonical source; profile skill tests and a relevant regression case |
+| Runtime, protocol or extension | Full `bun run test` in source and a fresh Claude profile with explicit canonical source; profile skill tests and a relevant regression case; `python tests/platform_smoke.py` on Windows/macOS when changing portable runtime |
 | Builder, setup or release | Fresh Codex **and** Claude targets; `--check`, isolated setup, profile/setup/archive tests; ZIP contents, checksums and repeatable builds |
 
 Run the commands below from the source root. See [testing](docs/en/testing.md) for detail. Report source checks, loaded runtime and live acceptance separately. Building or replacing files does not prove a client loaded them. Export 0.2 remains preview until the current build is verified in real Vids; a local fixture does not establish Google's full-referrer behavior. Video quality and actual client-model behavior need their own evidence.
@@ -95,7 +95,7 @@ Before finishing, review the staged diff, make a focused commit, and report chec
 <a id="commands"></a>
 ## Команды / Commands
 
-Исходник / Source — Linux, Node 22.13+, Python 3.11+, Bun, FFmpeg/ffprobe:
+Полный regression suite / Full regression suite — Linux, Node 22.13+, Python 3.11+, Bun, FFmpeg/ffprobe. Нативные Windows/macOS checks / Native Windows/macOS checks: `python tests/platform_smoke.py`; [платформы / platforms](docs/en/platforms.md).
 
 ```sh
 bun install --frozen-lockfile

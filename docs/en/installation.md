@@ -8,7 +8,7 @@ Use a separate permanent installation directory for each client. The repository 
 
 | Dependency | Requirement |
 | --- | --- |
-| OS | Linux; the installer explicitly rejects other platforms |
+| OS | Linux, macOS or native Windows; [platform instructions](platforms.md) |
 | Node.js | 22.13.0+ for built-in `node:sqlite`; Node 24 is the primary recorded test runtime |
 | Python | 3.11+ |
 | Bun | Install dependencies from `bun.lock` with `--frozen-lockfile` |
@@ -18,6 +18,8 @@ Use a separate permanent installation directory for each client. The repository 
 | Media tools | FFmpeg and ffprobe for export jobs and media inspection |
 
 The declared minimum Node/Chrome versions are not a claim that every combination has been tested. The connector needs no model API key, Google OAuth client, cookie export or public service. Your AI client and Google Vids retain their own sign-in and service requirements.
+
+For **Windows**, use the [PowerShell installation](platforms.md#windows--powershell), including the Windows-only Python dependency. Shell examples below target Linux/macOS; use the selected Windows Python executable for the same scripts.
 
 ## Build from source
 
@@ -50,7 +52,7 @@ python3 scripts/setup.py --profile codex
 python3 scripts/setup.py --profile codex --install
 ```
 
-For the Claude directory, replace `codex` with `claude`. Setup selects `node` from PATH; use `--node /absolute/path/to/node` to pin a different executable. The first invocation prints a plan. The second validates all destinations, registers the host, adds the client entry and links the skill. It does not start a model, browser or tab.
+For the Claude directory, replace `codex` with `claude`. Setup selects `node` from PATH; use `--node /absolute/path/to/node` to pin a different executable. The first invocation prints a plan. The second validates all destinations, registers the host, adds the client entry and installs the skill (a managed copy on Windows, a symlink on Linux/macOS). It does not start a model, browser or tab.
 
 ## Install from a release archive
 
@@ -76,7 +78,7 @@ Chrome's `debugger` permission is broad. The implementation restricts itself to 
 | Codex | `$CODEX_HOME/config.toml` or `~/.codex/config.toml` | `skills/google-vids` within the Codex directory | `com.vids_studio.bridge` |
 | Claude Code | `~/.claude.json` | `~/.claude/skills/vids-director` | `com.vids_studio.claude_bridge` |
 
-Native host manifests are registered below `~/.config/google-chrome/NativeMessagingHosts` by default. For explicit nondefault locations, use `--codex-dir`, `--claude-dir`, `--claude-config` or `--chrome-dir`; `--chrome-dir` is the Chrome user-data root containing `NativeMessagingHosts`, not a `Default` tab-profile directory.
+Native host manifests use the [platform-specific Chrome location](platforms.md). Windows also registers the manifest in HKCU; macOS uses an explicit Python launcher. For explicit nondefault locations, use `--codex-dir`, `--claude-dir`, `--claude-config` or `--chrome-dir`; `--chrome-dir` is the Chrome user-data root containing `NativeMessagingHosts`, not a `Default` tab-profile directory.
 
 Setup preserves unrelated settings and refuses conflicting registrations. It does not silently move an existing installation. Keep the installation path stable. If you are migrating a previously registered path, inspect and reconcile those registrations deliberately before installing the new location.
 
@@ -91,11 +93,11 @@ python3 scripts/build_profiles.py --profile codex --target ../vids-studio-codex 
 python3 scripts/build_profiles.py --profile claude --target ../vids-studio-claude --check
 ```
 
-Run `bun install --frozen-lockfile` inside each target if the lockfile changed. Run its setup dry-run; apply only the reviewed configuration changes if needed. A generated `build-manifest.json` records managed-file hashes; `--check` returns 1 on drift. Edit shared behavior in the source, then build again.
+Run `bun install --frozen-lockfile` inside each target if the lockfile changed. Run its setup dry-run and apply the plan. Windows setup refreshes the managed skill copy; retain the selected Python environment and update `requirements-windows.txt` dependencies when it changes. A generated `build-manifest.json` records managed-file hashes; `--check` returns 1 on drift. Edit shared behavior in the source, then build again.
 
 **Activate the files:** click **↻ on each extension's card** in `chrome://extensions`, reconnect its intended Vids tab, and refresh the corresponding MCP client. The page-wide **Update** button is not the reload control for an unpacked extension. Disconnect/reconnect alone does not reload changed extension files. A host or MCP process can also keep old code loaded.
 
-Version 0.2 uses local protocol 3 and extension protocol 2. Old 0.1 hosts do not participate in the new shared document coordinator. Updating one profile does not protect it from an old second profile. After activation, discard old session/control/snapshot values and repeat diagnostics. Source files, installed files and running processes are different states.
+Versions 0.2 and 0.3 use local protocol 3 and extension protocol 2. Version 0.3 adds a Windows transport handshake without weakening document ownership. Old 0.1 hosts do not participate in the new shared document coordinator. Updating one profile does not protect it from an old second profile. After activation, discard old session/control/snapshot values and repeat diagnostics. Source files, installed files and running processes are different states.
 
 ## Roll back local configuration
 
@@ -106,4 +108,4 @@ python3 scripts/setup.py --rollback /absolute/path/to/rollback-record.json
 python3 scripts/setup.py --rollback /absolute/path/to/rollback-record.json --install
 ```
 
-The first command previews; the second restores the exact managed files, modes and skill link. Rollback refuses to overwrite subsequent user edits. It does not revert source code or activate an older runtime. For code rollback, materialize the intended source version and complete the same reload/reconnect procedure.
+The first command previews; the second restores managed file bytes and the skill installation. Linux/macOS restore recorded modes and symlinks. Windows restores the managed skill copy and HKCU registration, with private current-user ACLs rather than arbitrary previous ACLs. Rollback refuses to overwrite subsequent user edits. It does not revert source code or activate an older runtime. For code rollback, materialize the intended source version and complete the same reload/reconnect procedure.

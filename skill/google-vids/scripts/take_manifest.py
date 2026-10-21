@@ -3,7 +3,6 @@
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
-import fcntl
 import hashlib
 import json
 import math
@@ -16,6 +15,11 @@ import subprocess
 import sys
 import tempfile
 from urllib.parse import urlparse
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 DEPENDENCIES = ("timing", "voice", "styled_captions", "soft_captions", "music", "sfx", "neighbors")
 MAX_JSON_BYTES = 8 * 1024 * 1024
@@ -45,7 +49,7 @@ def number(value, label, positive=False):
 
 def safe_path(value):
     path = Path(value).expanduser().absolute()
-    if any(component.is_symlink() for component in (path, *path.parents)):
+    if any(component.is_symlink() or (component.exists() and getattr(component.lstat(), "st_file_attributes", 0) & 0x400) for component in (path, *path.parents)):
         raise ValueError("Symlink paths are not accepted")
     return path
 
@@ -69,7 +73,7 @@ def evidence(values, require_files=True):
             if not parsed.netloc or parsed.username or parsed.password:
                 raise ValueError("Evidence URLs need a host and must not contain credentials")
             result.append(value)
-        elif parsed.scheme:
+        elif parsed.scheme and not Path(value).is_absolute():
             raise ValueError("Evidence accepts existing local files or HTTP(S) links only")
         else:
             path = safe_path(value)
@@ -155,6 +159,9 @@ def archive_source(manifest_path, source):
 
 
 def sync_directory(path):
+    # Windows has no POSIX directory fsync; file data is flushed before replace.
+    if os.name == "nt":
+        return
     fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
     try:
         os.fsync(fd)
@@ -364,12 +371,42 @@ def apply(data, request, manifest_path):
 def manifest_lock(path):
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = safe_path(path.with_suffix(path.suffix + ".lock"))
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    if os.name == "nt":
+        import pywintypes, win32api, win32con, win32file, win32security
+        token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32con.TOKEN_QUERY)
+        try:
+            user = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
+        finally:
+            token.Close()
+        attributes = pywintypes.SECURITY_ATTRIBUTES()
+        descriptor = win32security.SECURITY_DESCRIPTOR()
+        descriptor.SetSecurityDescriptorOwner(user, False)
+        attributes.SECURITY_DESCRIPTOR = descriptor
+        handle = win32file.CreateFile(str(lock_path), win32con.GENERIC_READ | win32con.GENERIC_WRITE,
+            win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE, attributes,
+            win32con.OPEN_ALWAYS, win32file.FILE_FLAG_OPEN_REPARSE_POINT, None)
+        try:
+            if win32file.GetFileInformationByHandle(handle)[0] & win32con.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise ValueError("Manifest lock must not be a reparse point")
+            descriptor = win32security.GetSecurityInfo(handle, win32security.SE_FILE_OBJECT, win32security.OWNER_SECURITY_INFORMATION)
+            if descriptor.GetSecurityDescriptorOwner() != user:
+                raise ValueError("Manifest lock must belong to the current user")
+            fd = msvcrt.open_osfhandle(handle.Detach(), os.O_RDWR | os.O_BINARY)
+        finally:
+            handle.Close()
+    else:
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise ValueError("Unsafe manifest lock")
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        if os.name == "nt":
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+        else:
+            if info.st_uid != os.getuid():
+                raise ValueError("Unsafe manifest lock")
+            fcntl.flock(fd, fcntl.LOCK_EX)
         safe_path(path)
         yield
     finally:

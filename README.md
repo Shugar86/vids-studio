@@ -8,11 +8,11 @@
 
 <p align="center">
   <a href="https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml"><img src="https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml/badge.svg" alt="Verify both profiles"></a>
-  <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0%20preview-ffb19e" alt="v0.2.0 preview"></a>
-  <img src="https://img.shields.io/badge/platform-Linux-a8e4d0" alt="Platform: Linux">
+  <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/release-v0.3.0%20preview-ffb19e" alt="v0.3.0 preview"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-a8e4d0" alt="Windows, macOS and Linux">
 </p>
 
-<p align="center"><a href="#start-here">Install</a> · <a href="#what-you-can-do">Use cases</a> · <a href="#how-it-works">How it works</a> · <a href="docs/en/usage.md">Guide</a> · <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.2.0">Downloads</a></p>
+<p align="center"><a href="#start-here">Install</a> · <a href="#what-you-can-do">Use cases</a> · <a href="#how-it-works">How it works</a> · <a href="docs/en/usage.md">Guide</a> · <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0">Downloads</a></p>
 
 ## Your video, still in the editor
 
@@ -62,19 +62,21 @@ You connect the intended document through the extension. The agent checks the co
 
 Both profiles can work on different documents independently. If they target the same document, one task receives control and the other receives `CONTROL_BUSY`; this requires the updated runtime in both profiles. Human editing remains possible. If an action's outcome is unknown, the agent must inspect it before continuing rather than repeat it blindly.
 
-**Where data goes.** The connector runs locally and uses a private Unix socket; it does not open a public TCP service, read cookies or passwords, or discover unrelated tabs. Editor observations and screenshots reach your AI client. Google Vids still sends its normal editor traffic and uploaded media to Google. Chrome's `debugger` permission is broad; document-only operation is a restriction enforced by this implementation. [Architecture, permissions and recovery →](docs/en/architecture.md)
+**Where data goes.** The connector runs locally: a private Unix socket on Linux/macOS and mutually authenticated loopback on Windows; it does not open a public TCP service, read cookies or passwords, or discover unrelated tabs. Editor observations and screenshots reach your AI client. Google Vids still sends its normal editor traffic and uploaded media to Google. Chrome's `debugger` permission is broad; document-only operation is a restriction enforced by this implementation. [Architecture, permissions and recovery →](docs/en/architecture.md)
 
 ## Start here
 
-**Supported installation: Linux.** You need Node.js **22.13+**, Python **3.11+**, Bun, Google Chrome **118+**, your own Codex or Claude Code installation, and access to Google Vids. FFmpeg/ffprobe are needed for export verification and media helpers. The declared minimum versions are not a claim that every combination has been tested. The bridge needs no separate model API key or Google OAuth application.
+**Installation: Windows, macOS and Linux (preview).** You need Node.js **22.13+**, Python **3.11+**, Bun, Google Chrome **118+**, your own Codex or Claude Code installation, and access to Google Vids. FFmpeg/ffprobe are needed for export verification and media helpers. The declared minimum versions are not a claim that every combination has been tested. The bridge needs no separate model API key or Google OAuth application.
 
-Choose a client archive from the [v0.2.0 preview release](https://github.com/Shugar86/vids-studio/releases/tag/v0.2.0):
+Choose a client archive from the [v0.3.0 preview release](https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0):
 
 | Codex | Claude Code | Development |
 | --- | --- | --- |
-| [Download Codex ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/vids-studio-0.2.0-codex.zip) | [Download Claude ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/vids-studio-0.2.0-claude.zip) | [Download source ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/vids-studio-0.2.0-source.zip) |
+| [Download Codex ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-codex.zip) | [Download Claude ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-claude.zip) | [Download source ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-source.zip) |
 
-Check downloads against [SHA256SUMS](https://github.com/Shugar86/vids-studio/releases/download/v0.2.0/SHA256SUMS). Extract the selected profile into a **permanent directory**. Dependencies are installed separately. Open the instructions for your client:
+Check downloads against [SHA256SUMS](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/SHA256SUMS). Extract the selected profile into a **permanent directory**. Dependencies are installed separately. Open the instructions for your client:
+
+**Windows:** follow the [PowerShell commands](docs/en/platforms.md#windows--powershell) with a dedicated Python environment. The commands below are for Linux/macOS. [Platform details and checks →](docs/en/platforms.md)
 
 <details>
 <summary><strong>Set up Codex</strong></summary>
@@ -162,7 +164,7 @@ For focused edits and take replacement, see [more prompts and the review criteri
 
 The automated checks cover both profiles: installation and packaging, MCP/native communication, document ownership, browser input, uploads, export handling and local helpers. Browser checks run in disposable profiles with local fixtures, separately from a user's real project. [CI runs](https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml) show results for specific revisions.
 
-**v0.2.0 is a preview.** The typed `export_mp4` job is implemented and tested in isolated browser conditions; acceptance against the current live Google Vids export is still pending. Unsupported download attribution stops for reconciliation. A valid MP4 also does not establish that the voice, motion or storytelling were reviewed. [Export details](docs/en/jobs.md) · [Verification boundaries](docs/en/testing.md)
+**v0.3.0 is a preview.** The typed `export_mp4` job is implemented and tested in isolated browser conditions; acceptance against the current live Google Vids export is still pending. Unsupported download attribution stops for reconciliation. A valid MP4 also does not establish that the voice, motion or storytelling were reviewed. [Export details](docs/en/jobs.md) · [Verification boundaries](docs/en/testing.md)
 
 This is an independent, unofficial project. It does not provide a Google Vids scene API, include Google AI access or bypass account restrictions. Google can change its editor; Chrome and the attached document must remain open.
 
