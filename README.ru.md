@@ -195,6 +195,8 @@ cd ../vids-studio-claude
 
 </details>
 
+**Помогите другим узнать о Vids Studio.** Если проект вам полезен, [поставьте звезду репозиторию](https://github.com/Shugar86/vids-studio) и поделитесь им с теми, кто делает видео в Google Vids. Отзывы об установке и воспроизводимые замечания тоже приветствуются.
+
 Хотите помочь проекту? Прочитайте [CONTRIBUTING.md](CONTRIBUTING.md) и [руководство по тестированию](docs/ru/testing.md). О воспроизводимых проблемах пишите в [Issues](https://github.com/Shugar86/vids-studio/issues); не включайте приватное содержимое документов, учётные данные и токены управления. Для чувствительных находок есть [правила безопасности](SECURITY.md), а изменения версий собраны в [CHANGELOG.md](CHANGELOG.md).
 
 Работаете над кодом с агентом? В [AGENTS.md](https://github.com/Shugar86/vids-studio/blob/main/AGENTS.md) — карта исходников, профили клиентов, проверки и правила публикации на русском и английском. [CLAUDE.md](https://github.com/Shugar86/vids-studio/blob/main/CLAUDE.md) задаёт точку входа для Claude.

@@ -193,6 +193,8 @@ This is an independent, unofficial project. It does not provide a Google Vids sc
 
 </details>
 
+**Help others discover Vids Studio.** If it fits your workflow, [star the repository](https://github.com/Shugar86/vids-studio) and share it with someone who makes videos in Google Vids. Setup feedback and reproducible issues are welcome.
+
 Want to contribute? Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [testing guide](docs/en/testing.md). Report reproducible problems through [Issues](https://github.com/Shugar86/vids-studio/issues); keep private document content, credentials and control tokens out of reports. See the [security policy](SECURITY.md) for sensitive findings and [CHANGELOG.md](CHANGELOG.md) for release changes.
 
 Developing with an agent? [AGENTS.md](https://github.com/Shugar86/vids-studio/blob/main/AGENTS.md) maps the source, client profiles, required checks and publication rules in English and Russian. [CLAUDE.md](https://github.com/Shugar86/vids-studio/blob/main/CLAUDE.md) adds the Claude entry point.
