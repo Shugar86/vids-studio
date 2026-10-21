@@ -185,7 +185,11 @@ class InstallerTests(unittest.TestCase):
 
 
 class PlatformInstallerTests(unittest.TestCase):
-    setUp = InstallerTests.setUp
+    def setUp(self):
+        InstallerTests.setUp(self)
+        discovery = patch.object(setup.shutil, 'which', return_value=None)
+        discovery.start()
+        self.addCleanup(discovery.stop)
 
     def plan(self):
         return setup.prepare(self.root, self.codex, self.chrome, sys.executable)
@@ -210,6 +214,44 @@ class PlatformInstallerTests(unittest.TestCase):
         stack.enter_context(patch.object(setup, 'restore_registry', side_effect=write))
         return stack, state
 
+
+    def test_windows_launcher_is_ascii_under_unicode_package_and_venv(self):
+        root = r'C:\Users\Иван\Видео 日本語\vids-studio'
+        python = root + r'\.venv\Scripts\python.exe'
+        launcher = setup.windows_native_launcher(python, root)
+        self.assertTrue(launcher.isascii())
+        self.assertIn('"%~dp0..\\.venv\\Scripts\\python.exe"', launcher)
+        self.assertIn('"%~dp0..\\native\\bridge.py" %*', launcher)
+        self.assertNotIn('Иван', launcher)
+
+    def test_windows_launcher_escapes_literal_percent_in_python_path(self):
+        launcher = setup.windows_native_launcher(r'C:\Users\you\python%test!\python.exe', r'C:\Users\you\app')
+        self.assertIn('python%%test!', launcher)
+        self.assertIn('DisableDelayedExpansion', launcher)
+        self.assertTrue(launcher.isascii())
+
+    def test_windows_launcher_cross_drive_ascii_fallback_and_unsafe_refusal(self):
+        launcher = setup.windows_native_launcher(r'D:\Python\python.exe', r'C:\Users\Иван\app')
+        self.assertIn('"D:\\Python\\python.exe"', launcher)
+        self.assertTrue(launcher.isascii())
+        with self.assertRaisesRegex(ValueError, 'package-local .venv'):
+            setup.windows_native_launcher(r'D:\Питон\python.exe', r'C:\Users\Иван\app')
+
+    def test_optional_media_executables_are_pinned_for_gui_clients(self):
+        discovery = {'ffmpeg': str(self.base / 'tools/ffmpeg'), 'ffprobe': str(self.base / 'tools/ffprobe')}
+        for platform in ('darwin', 'win32'):
+            with self.subTest(platform=platform), patch.object(setup.sys, 'platform', platform), patch.object(setup.shutil, 'which', side_effect=discovery.get):
+                expected = {'VIDS_STUDIO_PYTHON': sys.executable,
+                            'VIDS_STUDIO_FFMPEG': discovery['ffmpeg'], 'VIDS_STUDIO_FFPROBE': discovery['ffprobe']}
+                self.assertEqual(setup.client_environment(sys.executable), expected)
+                if platform == 'darwin':
+                    environment = tomllib.loads(self.plan()['new_config'])['mcp_servers']['google-vids']['env']
+                    self.assertEqual(environment, {**expected, 'VIDS_STUDIO_PYTHON': str(Path(sys.executable).resolve())})
+        with patch.object(setup.sys, 'platform', 'darwin'):
+            self.assertEqual(setup.client_environment(sys.executable), {'VIDS_STUDIO_PYTHON': sys.executable})
+        with patch.object(setup.sys, 'platform', 'linux'), patch.object(setup.shutil, 'which', side_effect=discovery.get):
+            self.assertEqual(setup.client_environment(sys.executable), {})
+
     def test_platform_chrome_directories(self):
         with patch.object(setup.Path, 'home', return_value=self.base):
             with patch.object(setup.sys, 'platform', 'darwin'):
@@ -221,7 +263,7 @@ class PlatformInstallerTests(unittest.TestCase):
 
     @unittest.skipIf(sys.platform == 'win32', 'Executes the POSIX launcher')
     def test_macos_launcher_uses_selected_python_and_preserves_arguments(self):
-        renamed = self.root.with_name("package with spaces and 'quotes'")
+        renamed = self.root.with_name("Пакет 🎥 with spaces and 'quotes'")
         self.root.rename(renamed)
         self.root = renamed
         (self.root / 'native/bridge.py').write_text('import json, sys\nprint(json.dumps(sys.argv[1:]))\n')

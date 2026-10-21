@@ -26,6 +26,8 @@ const exec = promisify(execFile);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const registry = path.join(temporary, 'coordinator');
 const launchers = JSON.parse(await fs.readFile(path.join(temporary, 'launchers.json'), 'utf8'));
+const profileTargets = JSON.parse(await fs.readFile(path.join(temporary, 'profile-targets.json'), 'utf8'));
+const profileEnvironments = JSON.parse(await fs.readFile(path.join(temporary, 'profile-environments.json'), 'utf8'));
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 const unicode = 'Русский титр 🎥 — 日本語';
 
@@ -51,7 +53,7 @@ async function connect(host, clients) {
   const client = new Client({name: `${host.name}-native-os-smoke`, version: '1'});
   await client.connect(new StdioClientTransport({command: process.execPath,
     args: [path.join(host.target, 'server/index.mjs')],
-    env: {...process.env, VIDS_STUDIO_SOCKET: host.endpoint}}));
+    env: {...process.env, ...profileEnvironments[host.name], VIDS_STUDIO_SOCKET: host.endpoint}}));
   clients.push(client);
   await until(async () => {
     assert.equal(host.child.exitCode, null, host.errors());
@@ -127,9 +129,10 @@ async function startHost(name, target, hosts, {documentId = `document-${name}`, 
 test('source and installed profiles preserve native framing, control, arbitration and crash fencing on the real OS', {timeout: 180000}, async () => {
   const hosts = [], clients = [];
   try {
-    const targets = [['source', root], ['codex', path.join(temporary, 'codex')], ['claude', path.join(temporary, 'claude')]];
+    const targets = [['source', root], ['codex', profileTargets.codex], ['claude', profileTargets.claude]];
     const sessions = [], controls = [], activeClients = [];
     for (const [name, target] of targets) {
+      if (name !== 'source') assert.ok(target.includes('Установка 🎥'), 'Installed launcher must exercise a Unicode path');
       const host = await startHost(name, target, hosts, {launcher: launchers[name]});
       const client = await connect(host, clients);
       activeClients.push(client);
@@ -231,22 +234,33 @@ test('job capabilities persist, wrong capabilities fail and widened database ACL
   assert.throws(() => new JobStore(directory), error => error.code === 'UNSAFE_JOB_STORE');
 });
 
-test('native FFmpeg verifies a real copied MP4 and rejects a fake download', {timeout: 120000}, async () => {
+test('pinned native media tools verify a real MP4 with an empty PATH and reject a fake download', {timeout: 120000}, async () => {
   const source = path.join(temporary, 'тест 🎥.mp4');
   const helper = path.join(root, 'native/platform_support.py');
+  const ffmpeg = process.env.VIDS_STUDIO_FFMPEG;
+  assert.ok(path.isAbsolute(ffmpeg));
+  assert.ok(path.isAbsolute(process.env.VIDS_STUDIO_FFPROBE));
   await exec(python, [helper, 'create-file', source]);
-  await exec('ffmpeg', ['-y', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x48:r=5:d=0.4',
+  await exec(ffmpeg, ['-y', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x48:r=5:d=0.4',
     '-an', '-threads', '1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', source]);
   const outputDirectory = path.join(temporary, 'verified-media');
-  const result = await verifyExport({source, outputDirectory, jobId: randomUUID()});
-  assert.equal(result.width, 64);
-  assert.equal(result.height, 48);
-  assert.equal(result.verification.decode, 'verified');
-  assert.equal(result.sha256.length, 64);
   const fake = path.join(temporary, 'fake.mp4');
   await exec(python, [helper, 'create-file', fake]);
   await fs.writeFile(fake, 'not video');
-  await assert.rejects(verifyExport({source: fake, outputDirectory, jobId: randomUUID()}), error => error.code === 'MEDIA_CHECK_FAILED');
+  const pathKey = Object.keys(process.env).find(key => key.toUpperCase() === 'PATH') || 'PATH';
+  const oldPath = process.env[pathKey];
+  process.env[pathKey] = '';
+  try {
+    const result = await verifyExport({source, outputDirectory, jobId: randomUUID()});
+    assert.equal(result.width, 64);
+    assert.equal(result.height, 48);
+    assert.equal(result.verification.decode, 'verified');
+    assert.equal(result.sha256.length, 64);
+    await assert.rejects(verifyExport({source: fake, outputDirectory, jobId: randomUUID()}), error => error.code === 'MEDIA_CHECK_FAILED');
+  } finally {
+    if (oldPath === undefined) delete process.env[pathKey];
+    else process.env[pathKey] = oldPath;
+  }
 });
 
 test('Windows rejects a stale-port impersonator before sending a browser request or capability',

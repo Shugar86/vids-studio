@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import uuid
 import zipfile
 
@@ -138,7 +139,9 @@ def main():
         return
     node, bun = shutil.which('node'), shutil.which('bun')
     assert node and bun, 'Node and Bun are required'
-    assert shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg and ffprobe are required'
+    media_tools = {f'VIDS_STUDIO_{name.upper()}': str(Path(shutil.which(name)).absolute())
+                   for name in ('ffmpeg', 'ffprobe') if shutil.which(name)}
+    assert len(media_tools) == 2, 'FFmpeg and ffprobe are required'
     # Windows verifies the owner profile. A short canonical home path also
     # avoids macOS's 104-byte Unix socket limit and its symlinked /tmp alias.
     temporary_parent = Path.home().resolve()
@@ -147,7 +150,7 @@ def main():
                'VIDS_PLATFORM_SMOKE_DIR': str(base), 'XDG_STATE_HOME': str(base / 'mcp-state')}
         verify_private_files(base)
         setup = module('vids_platform_setup', ROOT / 'scripts/setup.py')
-        backups, configurations, launchers = [], {}, {}
+        backups, configurations, launchers, profile_targets, profile_environments = [], {}, {}, {}, {}
         registry_root = rf'Software\VidsStudioTests\{uuid.uuid4().hex}'
         codex_dir, claude_dir = base / 'config/codex', base / 'config/claude'
         from platform_support import ensure_private_directory
@@ -159,10 +162,17 @@ def main():
         configurations = {file: file.read_bytes() for file in (codex_config, claude_config)}
         try:
             for profile in ('codex', 'claude'):
-                target = base / profile
+                target = base / 'Установка 🎥' / profile
+                profile_targets[profile] = str(target)
                 run([sys.executable, ROOT / 'scripts/build_profiles.py', '--profile', profile, '--target', target, '--write'], env=env)
                 run([sys.executable, ROOT / 'scripts/build_profiles.py', '--profile', profile, '--target', target, '--check'], env=env)
                 run([bun, 'install', '--frozen-lockfile'], cwd=target, env=env)
+                selected_python = sys.executable
+                if sys.platform == 'win32' and profile == 'codex':
+                    # Exercise Unicode paths in both the bridge and Python
+                    # itself. Claude separately covers the external interpreter.
+                    run([sys.executable, '-m', 'venv', '--system-site-packages', target / '.venv'], env=env)
+                    selected_python = str(target / '.venv/Scripts/python.exe')
                 definition = json.loads((target / 'profile.json').read_text(encoding='utf-8'))
                 helper = target / 'skill' / definition['skillName'] / 'scripts/take_manifest.py'
                 take_manifest = base / f'{profile}-takes.json'
@@ -174,7 +184,7 @@ def main():
                 assert status['ok'] is True and status['result']['project_id'] == 'native-platform-fixture'
                 plan = setup.prepare(target, codex_dir, base / 'chrome', node, profile=profile,
                                      claude_dir=claude_dir, claude_config=claude_config,
-                                     registry_root=registry_root)
+                                     registry_root=registry_root, python=selected_python)
                 assert {file: file.read_bytes() for file in configurations} == configurations, 'Dry-run changed configuration'
                 backup = setup.install(plan)
                 assert backup is not None
@@ -182,13 +192,27 @@ def main():
                 host = json.loads(plan['host_path'].read_text(encoding='utf-8'))
                 assert len(host['allowed_origins']) == 1 and '*' not in host['allowed_origins'][0]
                 launchers[profile] = host['path']
+                configured = (tomllib.loads(codex_config.read_text(encoding='utf-8'))['mcp_servers']
+                              if profile == 'codex' else json.loads(claude_config.read_text(encoding='utf-8'))['mcpServers'])
+                profile_environments[profile] = configured[definition['mcpName']].get('env', {})
+                if sys.platform in ('win32', 'darwin'):
+                    assert profile_environments[profile]['VIDS_STUDIO_PYTHON'] == str(Path(selected_python).resolve())
+                    for key, value in media_tools.items():
+                        pinned = Path(profile_environments[profile][key])
+                        assert pinned.is_absolute() and pinned.resolve() == Path(value).resolve(), f'{profile}: missing or incorrect {key} pin'
                 repeated = setup.prepare(target, codex_dir, base / 'chrome', node, profile=profile,
                                          claude_dir=claude_dir, claude_config=claude_config,
-                                         registry_root=registry_root)
+                                         registry_root=registry_root, python=selected_python)
                 assert setup.install(repeated) is None, 'Repeated install was not idempotent'
                 configurations = {file: file.read_bytes() for file in configurations}
             (base / 'launchers.json').write_text(json.dumps(launchers), encoding='utf-8')
-            print('PASS: Codex and Claude materialization, frozen dependencies, isolated installation and idempotence')
+            (base / 'profile-targets.json').write_text(json.dumps(profile_targets), encoding='utf-8')
+            (base / 'profile-environments.json').write_text(json.dumps(profile_environments), encoding='utf-8')
+            # Linux preserves its existing installer config, so pass explicit
+            # pins there; Windows/macOS exercise the actual installed pins.
+            env.update(media_tools if sys.platform == 'linux' else {
+                key: profile_environments['codex'][key] for key in media_tools})
+            print('PASS: Unicode profile paths, frozen dependencies, isolated installation and idempotence')
             print(run([node, '--test', '--test-concurrency=1', ROOT / 'tests/platform_mcp.mjs'], env=env), end='')
         finally:
             for backup in reversed(backups):
@@ -197,7 +221,7 @@ def main():
         assert codex_config.read_bytes() == b'# retained setting\nmodel = "fixture"\n'
         assert claude_config.read_bytes() == b'{"theme":"fixture","mcpServers":{"previous":{"command":"fixture"}}}\n'
         for profile in ('codex', 'claude'):
-            definition = json.loads((base / profile / 'profile.json').read_text(encoding='utf-8'))
+            definition = json.loads((Path(profile_targets[profile]) / 'profile.json').read_text(encoding='utf-8'))
             assert not (base / 'chrome/NativeMessagingHosts' / f"{definition['nativeHostName']}.json").exists()
         if sys.platform == 'win32':
             import winreg

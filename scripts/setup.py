@@ -7,6 +7,7 @@ import base64
 import hashlib
 import importlib.util
 import json
+import ntpath
 import os
 from pathlib import Path
 import re
@@ -45,6 +46,37 @@ def default_chrome_directory():
     if is_windows():
         return Path(os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData/Local'))) / 'Google/Chrome/User Data'
     return Path.home() / '.config/google-chrome'
+
+
+def windows_native_launcher(python, root):
+    """ASCII batch text; cmd.exe expands its own Unicode directory via %~dp0."""
+    python, root = str(python), str(root)
+    if any('"' in value or '\n' in value or '\r' in value for value in (python, root)):
+        raise ValueError('Unsupported quote or newline in installation path')
+    try:
+        relative = ntpath.relpath(python, ntpath.join(root, '.runtime'))
+    except ValueError:  # A selected Python on another drive needs an absolute path.
+        relative = None
+    if relative is not None and relative.isascii():
+        interpreter = '%~dp0' + relative.replace('%', '%%')
+    elif python.isascii():
+        interpreter = python.replace('%', '%%')
+    else:
+        raise ValueError('Create a package-local .venv and run its Scripts\\python.exe: this external Python path cannot be represented safely in the Windows launcher')
+    # The bridge and launcher are fixed siblings inside the package; no user
+    # path bytes enter the batch source. Disable delayed expansion for ! paths.
+    return f'@echo off\r\nsetlocal DisableDelayedExpansion\r\n"{interpreter}" -u "%~dp0..\\native\\bridge.py" %*\r\n'
+
+
+def client_environment(python):
+    if sys.platform == 'linux':
+        return {}
+    environment = {'VIDS_STUDIO_PYTHON': python}
+    for command in ('ffmpeg', 'ffprobe'):
+        executable = shutil.which(command)
+        if executable:
+            environment['VIDS_STUDIO_' + command.upper()] = str(Path(executable).absolute())
+    return environment
 
 
 def file_mode(path):
@@ -300,12 +332,7 @@ def prepare(root, codex_dir, chrome_dir, node, *, profile=None, claude_dir=None,
         launcher = '#!/bin/sh\nexec ' + shlex.quote(python) + ' -u ' + shlex.quote(str(root / 'native/bridge.py')) + ' "$@"\n'
     elif is_windows():
         host_command = root / '.runtime' / f'{selected["id"]}-native-host.cmd'
-        # Percent signs are expanded even inside cmd.exe quotes. Delayed
-        # expansion is explicitly disabled, and command text is never user input.
-        if any('"' in value or '\n' in value or '\r' in value for value in (python, str(root))):
-            raise ValueError('Unsupported quote or newline in installation path')
-        quoted_python, quoted_bridge = python.replace('%', '%%'), str(root / 'native/bridge.py').replace('%', '%%')
-        launcher = f'@echo off\r\nsetlocal DisableDelayedExpansion\r\n"{quoted_python}" -u "{quoted_bridge}" %*\r\n'
+        launcher = windows_native_launcher(python, root)
     host = {'name': selected['nativeHostName'], 'description': 'Google Vids Studio local bridge',
             'path': str(host_command), 'type': 'stdio',
             'allowed_origins': [f'chrome-extension://{eid}/']}
@@ -343,18 +370,20 @@ def prepare(root, codex_dir, chrome_dir, node, *, profile=None, claude_dir=None,
     if config_path.is_symlink():
         raise ValueError(f'Client config is a symlink; edit its source explicitly: {config_path}')
     old_config = config_path.read_text(encoding='utf-8') if config_path.exists() else ''
+    environment = client_environment(python)
     if selected['id'] == 'codex':
         config = tomllib.loads(old_config)
         expected = {'command': node, 'args': [str(root / 'server/index.mjs')], 'startup_timeout_sec': 15, 'tool_timeout_sec': 35}
         if sys.platform != 'linux':
-            expected['env'] = {'VIDS_STUDIO_PYTHON': python}
+            expected['env'] = environment
         existing = config.get('mcp_servers', {}).get(server_name)
         if existing is not None and existing != expected:
             raise ValueError(f'A different [mcp_servers.{server_name}] exists; no settings changed')
-        addition = ('\n\n' + MARKER + f'\n[mcp_servers.{server_name}]\n' + f'command = {json.dumps(node)}\n'
-                    + f'args = [{json.dumps(str(root / "server/index.mjs"))}]\nstartup_timeout_sec = 15\ntool_timeout_sec = 35\n')
+        addition = ('\n\n' + MARKER + f'\n[mcp_servers.{server_name}]\n' + f'command = {json.dumps(node, ensure_ascii=False)}\n'
+                    + f'args = [{json.dumps(str(root / "server/index.mjs"), ensure_ascii=False)}]\nstartup_timeout_sec = 15\ntool_timeout_sec = 35\n')
         if sys.platform != 'linux':
-            addition += f'env = {{ VIDS_STUDIO_PYTHON = {json.dumps(python)} }}\n'
+            entries = ', '.join(f'{key} = {json.dumps(value, ensure_ascii=False)}' for key, value in environment.items())
+            addition += f'env = {{ {entries} }}\n'
         new_config = old_config if existing is not None else old_config + addition
         tomllib.loads(new_config)
     else:
@@ -363,7 +392,7 @@ def prepare(root, codex_dir, chrome_dir, node, *, profile=None, claude_dir=None,
             raise ValueError('Claude config/mcpServers must be JSON objects')
         expected = {'type': 'stdio', 'command': node, 'args': [str(root / 'server/index.mjs')], 'env': {}}
         if sys.platform != 'linux':
-            expected['env'] = {'VIDS_STUDIO_PYTHON': python}
+            expected['env'] = environment
         existing = config.get('mcpServers', {}).get(server_name)
         if existing is not None:
             normalized = {'type': 'stdio', 'env': {}, **existing} if isinstance(existing, dict) else existing

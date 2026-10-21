@@ -7,6 +7,7 @@
 - Native Windows and macOS installation for Codex and Claude Code, with platform-specific Chrome registration, explicit Python launchers and guarded rollback.
 - Windows uses private ACL-protected storage, handle-based document locks and a mutually authenticated loopback transport. Client commands are sent only after the native host proves its identity. Linux/macOS retain private Unix sockets and document fencing.
 - Managed Windows skill copies avoid symlink privileges; media paths, persistent jobs and take-manifest locking support Windows.
+- Windows launchers support Unicode installation paths; Windows/macOS setup records available media-tool paths for clients launched outside a terminal.
 - Native Windows/macOS CI complements the full Linux suites with both profiles, real local processes, isolated installation/rollback, private-state checks, media verification and reproducible packaging.
 - MIT license included in all packages. English/Russian platform guides cover PowerShell, Terminal, updates and verification boundaries.
 
@@ -17,6 +18,7 @@ Live Google Vids acceptance and editorial review remain separate from simulated-
 - Нативная установка на Windows и macOS для Codex и Claude Code: штатная регистрация Chrome, явный путь Python и откат с проверкой последующих изменений.
 - На Windows используются закрытые ACL, блокировки владения документом и loopback с взаимной аутентификацией. Команды передаются только после проверки native host. На Linux/macOS сохраняются закрытые Unix sockets и правила восстановления неизвестных исходов.
 - Управляемые копии навыков Windows не требуют права на symlink; адаптированы пути медиа, постоянные задания и блокировка манифеста дублей.
+- Windows-launcher поддерживает Unicode в пути установки; setup Windows/macOS сохраняет найденные пути медиа-инструментов для клиентов, запущенных вне терминала.
 - Нативный CI Windows/macOS дополняет полные Linux-проверки: оба клиента, реальные локальные процессы, изолированные установка и откат, права, медиа и воспроизводимость упаковки.
 - MIT включена во все пакеты. Инструкции RU/EN описывают PowerShell, Terminal, обновление и границы подтверждения.
 

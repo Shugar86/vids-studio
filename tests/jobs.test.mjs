@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {test, before, after} from 'node:test';
 import {mkdtemp, mkdir, rm, lstat, readFile, writeFile, symlink} from 'node:fs/promises';
-import {join} from 'node:path';
+import {join, resolve, delimiter} from 'node:path';
+import {accessSync, constants} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {randomUUID, randomBytes} from 'node:crypto';
@@ -176,4 +177,37 @@ test('recovery rejects the old native token before it can acknowledge an unresol
 test('an ok envelope without confirmed lease release never permits local verification',async t=>{
   const f=await fixture(t,{bridge:async method=>method==='release_control'?{ok:true,result:{released:false}}:null,verify:async()=>{throw Error('verification must not run with unconfirmed lease');}});
   const job=await f.jobs.start(f.args);await f.jobs.drain();const status=f.jobs.status({jobId:job.id,jobToken:job.jobToken});assert.equal(status.state,'needs_reconciliation');assert.equal(status.issue.code,'CONTROL_RELEASE_UNCONFIRMED');assert.equal(status.evidence.some(e=>e.kind==='control_released'),false);
+});
+
+
+test('explicit FFmpeg tools verify exports without PATH and do not fall back from a missing configured executable', async () => {
+  const variables = ['PATH', 'VIDS_STUDIO_FFMPEG', 'VIDS_STUDIO_FFPROBE'];
+  const original = Object.fromEntries(variables.map(name => [name, process.env[name]]));
+  const locate = binary => {
+    const configured = original[`VIDS_STUDIO_${binary.toUpperCase()}`];
+    if (configured) return configured;
+    for (const directory of (original.PATH || '').split(delimiter)) {
+      const candidate = resolve(directory, binary + (process.platform === 'win32' ? '.exe' : ''));
+      try { accessSync(candidate, constants.X_OK); return candidate; } catch {}
+    }
+    throw new Error(`${binary} is required by the export test fixture`);
+  };
+  const ffmpeg = locate('ffmpeg'), ffprobe = locate('ffprobe');
+  const outputDirectory = await mkdtemp(join(temporary, 'explicit-tools-'));
+  try {
+    process.env.VIDS_STUDIO_FFMPEG = ffmpeg;
+    process.env.VIDS_STUDIO_FFPROBE = ffprobe;
+    process.env.PATH = join(temporary, 'no-tools-on-path');
+    const result = await verifyExport({source, outputDirectory, jobId: randomUUID()});
+    assert.equal(result.verification.container, 'verified');
+    assert.equal(result.verification.decode, 'verified');
+    process.env.PATH = original.PATH;
+    process.env.VIDS_STUDIO_FFPROBE = join(temporary, 'missing-ffprobe');
+    await assert.rejects(verifyExport({source, outputDirectory, jobId: randomUUID()}), error => error.code === 'MEDIA_TOOL_UNAVAILABLE');
+  } finally {
+    for (const [name, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
 });

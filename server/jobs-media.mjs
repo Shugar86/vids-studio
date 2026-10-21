@@ -8,8 +8,10 @@ import {spawn} from 'node:child_process';
 import {jobError, privateDirectory} from './jobs-store.mjs';
 
 async function command(binary, args, timeoutMs) {
+  const configured = process.env[binary === 'ffmpeg' ? 'VIDS_STUDIO_FFMPEG' : 'VIDS_STUDIO_FFPROBE'];
+  if (configured && !isAbsolute(configured)) throw jobError('MEDIA_TOOL_UNAVAILABLE', `${binary} must be configured with an absolute executable path.`);
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, {stdio: ['ignore', 'pipe', 'pipe']});
+    const child = spawn(configured || binary, args, {stdio: ['ignore', 'pipe', 'pipe']});
     let stdout = '', stderr = ''; let settled = false;
     const finish = (error, result) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(result); };
     const timer = setTimeout(() => { child.kill('SIGKILL'); finish(jobError('MEDIA_CHECK_TIMEOUT', `${binary} did not finish in time.`)); }, timeoutMs);

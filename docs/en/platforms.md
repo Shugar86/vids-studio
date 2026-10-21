@@ -12,6 +12,8 @@ Version 0.3 adds native Windows and macOS installation for both Codex and Claude
 
 Use native Node.js 22.13+ (Node 24 recommended), Python 3.11+, Bun and Google Chrome on a system supported by those dependencies. Install FFmpeg/ffprobe for media helpers and export verification. Use a normal local account and a permanent directory; Windows runtime state must remain beneath that user's local profile, with Windows ACL support. Network shares, reparse points and shared writable state directories are rejected.
 
+On Windows/macOS, setup records the absolute Node and Python paths. When it finds FFmpeg and ffprobe, it also records their absolute paths as `VIDS_STUDIO_FFMPEG` and `VIDS_STUDIO_FFPROBE` in the client's MCP environment, so media verification does not depend on a GUI application's PATH. Install the media tools before setup for this behavior. If they are absent, installation still supports editor tools; export verification requires installing them and updating the registration, or making them available on the MCP client's PATH. Linux keeps its existing PATH behavior.
+
 ## Windows — PowerShell
 
 Extract the Codex or Claude ZIP beneath your user profile, for example `C:\Users\you\Apps\vids-studio-codex`. Open PowerShell in that directory. The example selects Codex; replace `codex` with `claude` inside the Claude package.
@@ -25,6 +27,8 @@ py -3 -m venv .venv
 ```
 
 No PowerShell activation or execution-policy change is needed. Setup records the selected Python interpreter for Chrome and the MCP client; retain `.venv` in place. The Windows-only `pywin32` dependency provides ownership and ACL checks. Missing dependencies or unsafe permissions cause an error instead of a weaker connection.
+
+The Windows launcher contains only ASCII and resolves package files relative to itself, including when the user or installation directory contains spaces or Unicode. If an external Python path cannot be represented safely, setup asks you to use the package-local `.venv` shown above.
 
 Setup creates a native-host launcher and manifest, then registers the manifest under `HKCU\Software\Google\Chrome\NativeMessagingHosts`. It records the previous registry/configuration state for rollback and refuses collisions. Administrator privileges are not required.
 
@@ -46,7 +50,7 @@ Replace `codex` with `claude` for the Claude package. Setup creates a launcher w
 
 On every platform, load the package's `extension` directory at `chrome://extensions`, open the intended Vids document, explicitly connect it in the extension and refresh the client's MCP connection. Verify `vids_diagnostics` and `vids_status` before editing. Each client retains its separate extension and MCP identity.
 
-After updating package files, rerun setup, reload each unpacked extension and reconnect the MCP client. On Windows, setup refreshes the managed skill copy; do not edit that installed copy. Use the source skill instead.
+After updating package files, rerun setup, reload each unpacked extension and reconnect the MCP client. If you add media tools after installation or change a recorded executable path, roll back the current registration first (newest record first), then run setup with the desired tools available. On Windows, setup refreshes the managed skill copy; do not edit that installed copy. Use the source skill instead.
 
 Setup prints a private `rollbackRecord` when it changes configuration. Preview rollback with the same Python interpreter: `scripts/setup.py --rollback RECORD`; add `--install` to apply it. Rollback checks for later edits and restores the recorded bytes and Windows registration. Windows files receive the current user’s private ACL; arbitrary previous ACLs are not reproduced. Linux/macOS retain recorded file modes. It does not revert code or reload running processes. See the [full update and rollback instructions](installation.md).
 
