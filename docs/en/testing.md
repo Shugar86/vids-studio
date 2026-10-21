@@ -1,0 +1,89 @@
+# Testing and verified limits
+
+[English](testing.md) · [Русский](../ru/testing.md) · [Home](../../README.md)
+
+Treat three kinds of evidence separately: **source checks**, **loaded runtime**, and **live product behavior**. Tests with a disposable browser are useful evidence of the mechanism. They do not establish that a particular Google account, current editor UI or generated video behaves the same way.
+
+## Reproduce the automated checks
+
+From a source checkout, install the locked dependencies and Playwright browser. Install FFmpeg/ffprobe through your environment's package manager if they are not already available.
+
+```sh
+bun install --frozen-lockfile
+bunx playwright install chromium
+python3 scripts/build_profiles.py --profile codex --target . --write
+bun run test
+python3 -I -m unittest discover -s skill/google-vids/tests
+python3 -I -m unittest discover -s skill/vids-director/tests
+```
+
+The full suite includes Python unit/process tests and Node tests. Browser fixtures use disposable profiles and locally served or intercepted content. They do not attach to the user's Chrome or edit a real Google document. Media checks generate small local fixtures and use FFmpeg/ffprobe.
+
+For a materialized profile, supply the complete source checkout to run the cross-profile source test:
+
+```sh
+VIDS_STUDIO_CANONICAL_SOURCE=/absolute/path/to/vids-studio bun run test
+```
+
+Without that explicit source, the cross-profile source test can be skipped in a standalone profile archive. Do not describe such a run as full source acceptance. Run the profile's own skill tests as well: `skill/google-vids/tests` for Codex or `skill/vids-director/tests` for Claude Code.
+
+Useful focused checks include:
+
+```sh
+node --test tests/jobs.test.mjs tests/export-watch.test.mjs
+node --test tests/profiles.integration.test.mjs
+python3 scripts/build_profiles.py --profile codex --target /absolute/installation/codex --check
+python3 scripts/build_profiles.py --profile claude --target /absolute/installation/claude --check
+```
+
+`--check` verifies managed file hashes and returns nonzero on drift. It does not reload any process or authenticate an AI client.
+
+## What the suite exercises
+
+| Area | Evidence provided by the suite |
+| --- | --- |
+| Profile packaging | Distinct identities, deterministic common builds, fresh targets, guarded updates and release contents |
+| Setup | Preserved unrelated settings, collision refusal, exact rollback and prerequisite validation |
+| MCP transport | Real local MCP clients/native processes; standard text and image responses |
+| Document ownership | Independent documents, refusal of a second owner for the same document, durable unknown outcomes and generation fencing |
+| Browser driver | Target/document validation, Unicode input, snapshots, drag, upload interception and screenshot recovery |
+| Export watcher | Actual MV3 watcher with a disposable Chromium profile; HTTP, redirect and blob fixtures, event order and attribution failures |
+| Export jobs | Durable intent, retained job capabilities, restart/recovery, cancellation, no automatic replay and local MP4 verification |
+| Media helpers | Real small media/image fixtures, frame/alpha checks and take history/dependency invalidation |
+
+Fixtures test known failure modes, not every timing interleaving or future browser change. Review new behavior with an appropriately targeted regression case; do not add tests that only restate implementation details.
+
+## Read-only live smoke
+
+After the user reloads the extension, explicitly reconnects the intended document and refreshes MCP, run inside that profile:
+
+```sh
+node scripts/live_smoke.mjs --document EXACT_DOCUMENT_ID
+```
+
+Optionally add `--screenshot /absolute/new-file.png`; the path must be new and absolute. The script checks runtime compatibility and the exact document, acquires its own control, observes, receives a standard PNG response and releases control. It does not edit the movie. A failed release remains an explicit failed check. Its printed evidence omits raw control capabilities and full DOM content.
+
+Run this separately for each profile. A successful SDK smoke confirms the transport and current attachment. It does not prove that a previously open client chat refreshed its tools, or that the client's model followed the creative skill correctly.
+
+## Current acceptance boundary
+
+The 0.2 implementation has automated coverage of both profiles and isolated browser mechanisms. The public package deliberately excludes private project content, local installation state and historical film screenshots.
+
+The following still require explicit live verification with the **current loaded build**:
+
+- The typed `export_mp4` recipe against an actual Google Vids export, including its document referrer and download-event behavior.
+- Account-dependent generation, avatars, voices, captions and other UI features chosen for a specific project.
+- Audible, visible and editorial quality of each new video or take.
+- Recovery from a particular real browser hang; a passing delayed-read fixture does not establish every live failure mode.
+
+The export fixture intentionally supplies a full document referrer using `referrer=unsafe-url`. It proves the watcher under those conditions. Actual Vids may supply no referrer or only an origin; the implementation rejects that attribution rather than accepting a nearby file. Deprecated CDP download events and same-document concurrent downloads introduce additional limits described in [jobs](jobs.md).
+
+A prior successful upload or observed menu is not evidence of a new export, a new build activation or a different account feature. Record observed results with version, profile and the type of environment; keep confidential project data out of public evidence.
+
+## Building release artifacts
+
+```sh
+python3 scripts/build_release.py --output dist
+```
+
+This creates source, Codex and Claude ZIPs, `SHA256SUMS` and `release-manifest.json`. Dependencies, runtime stores, configuration backups and local work are excluded. Validate the archives, their hashes and both profile installs before publishing. Release creation does not itself create a GitHub release or push source changes.

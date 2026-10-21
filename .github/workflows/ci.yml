@@ -1,0 +1,76 @@
+name: Verify both profiles
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node ${{ matrix.node }} · Codex + Claude
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.3.14'
+      - name: Install test dependencies
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Check committed profile and run source tests
+        run: |
+          python3 scripts/build_profiles.py --profile codex --target . --check
+          bun run test
+          python3 -m unittest discover -s skill/google-vids/tests -p 'test_*.py'
+          python3 -m unittest discover -s skill/vids-director/tests -p 'test_*.py'
+      - name: Build a fresh Claude profile
+        run: |
+          python3 scripts/build_profiles.py --profile claude --target "$RUNNER_TEMP/vids-claude" --write
+          python3 scripts/build_profiles.py --profile claude --target "$RUNNER_TEMP/vids-claude" --check
+      - name: Test the fresh Claude profile, including cross-profile arbitration
+        working-directory: ${{ runner.temp }}/vids-claude
+        env:
+          VIDS_STUDIO_CANONICAL_SOURCE: ${{ github.workspace }}
+        run: |
+          bun install --frozen-lockfile
+          bun run test
+          python3 -m unittest discover -s skill/vids-director/tests -p 'test_*.py'
+      - name: Build deterministic release packages
+        if: matrix.node == '24'
+        run: |
+          python3 scripts/build_release.py --output dist
+          python3 scripts/build_release.py --output "$RUNNER_TEMP/vids-release-repeat"
+          diff -r dist "$RUNNER_TEMP/vids-release-repeat"
+          cd dist
+          sha256sum --check SHA256SUMS
+      - name: Keep verified packages
+        if: matrix.node == '24'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vids-studio-preview
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

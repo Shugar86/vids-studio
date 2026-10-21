@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Video layers</title>
+<!-- Local full-frame layer template. Adapt dimensions, fonts and safe areas to the brief.
+Use render_layer.mjs --show ID, then verify actual placement in Vids.
+No font binaries are bundled; provide licensed local fonts or inspect fallback. -->
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  :root {
+    /* Example tokens and placement; customize for this scene. */
+    --ground: #F1F3EC;
+    --ink: #17211C;
+    --accent: #FFC92E;
+    --display: "Unbounded", sans-serif;
+    --ui: "Onest", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+  body { position: relative; font-family: var(--ui); color: var(--ink); }
+  .layer { position: absolute; }
+
+  /* Example tokens and placement; customize for this scene. */
+  #headline { left: 84px; top: 240px; width: 860px; }
+  #headline h1 { font: 800 104px/1.04 var(--display); letter-spacing: -3px; }
+  #object { left: 120px; top: 660px; width: 600px; height: 360px; background: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="layer" id="headline"><h1 data-fit="2">One idea per scene</h1></div>
+  <div class="layer" id="object"></div>
+</body>
+</html>

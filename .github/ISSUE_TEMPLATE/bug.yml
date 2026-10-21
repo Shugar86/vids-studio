@@ -1,0 +1,33 @@
+name: Bug report / Ошибка
+description: Report reproducible behavior / Опишите воспроизводимую проблему
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Use English or Russian. Remove document URLs, tokens, personal content and local usernames. Security issue? Use Security → Report a vulnerability. / Можно писать по-русски. Удалите ссылки на документы, токены, личные данные и имя пользователя."
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Client profile / Профиль клиента
+      options: [Codex, Claude Code, Both / Оба]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions / Версии
+      description: Vids Studio, OS, Node, Python, Chrome
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction / Воспроизведение
+      description: Steps, expected result, actual result; use a synthetic document / Шаги, ожидаемый и фактический результат на тестовом документе
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence / Обезличенные подтверждения
+      description: Error codes and minimal logs; never include controlToken or jobToken / Коды ошибок и минимум логов; без токенов

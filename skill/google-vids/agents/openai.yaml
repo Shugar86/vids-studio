@@ -1,0 +1,4 @@
+interface:
+  display_name: "Google Vids"
+  short_description: "Create and review Google Vids videos · EN/RU"
+  default_prompt: "Use $google-vids to create or improve this Google Vids video and verify the result in my language."

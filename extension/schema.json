@@ -1,0 +1,558 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vids Studio extension request envelope v2",
+  "type": "object",
+  "required": [
+    "v",
+    "type",
+    "id",
+    "method",
+    "params"
+  ],
+  "properties": {
+    "v": {
+      "const": 2
+    },
+    "type": {
+      "const": "request"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "method": {
+      "enum": [
+        "status",
+        "observe",
+        "screenshot",
+        "click",
+        "drag",
+        "scroll",
+        "type_text",
+        "press_key",
+        "upload",
+        "upload_via_picker",
+        "export_trigger",
+        "export_download_status"
+      ]
+    },
+    "params": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "not": {
+              "const": "status"
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "sessionId"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "enum": [
+              "click",
+              "drag",
+              "scroll",
+              "type_text",
+              "press_key",
+              "upload",
+              "upload_via_picker",
+              "export_trigger"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "snapshotId"
+            ],
+            "properties": {
+              "snapshotId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "observe"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "properties": {
+              "maxNodes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1500,
+                "default": 500
+              },
+              "diagnostics": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "screenshot"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "png",
+                  "jpeg"
+                ],
+                "default": "png"
+              },
+              "quality": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "click"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "properties": {
+              "nodeRef": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number",
+                "minimum": 0
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0
+              },
+              "button": {
+                "enum": [
+                  "left",
+                  "right",
+                  "middle"
+                ]
+              },
+              "clickCount": {
+                "enum": [
+                  1,
+                  2
+                ]
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "nodeRef"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "x"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "y"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "not": {
+                  "required": [
+                    "nodeRef"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "drag"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "$ref": "#/$defs/point"
+              },
+              "to": {
+                "$ref": "#/$defs/point"
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 60,
+                "default": 12
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "scroll"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "x",
+              "y",
+              "deltaY"
+            ],
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0
+              },
+              "deltaX": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000,
+                "default": 0
+              },
+              "deltaY": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "type_text"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "text"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 100000
+              },
+              "replace": {
+                "type": "boolean",
+                "default": false
+              },
+              "nodeRef": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "press_key"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "key"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 30
+              },
+              "modifiers": {
+                "type": "array",
+                "maxItems": 4,
+                "items": {
+                  "enum": [
+                    "Alt",
+                    "Control",
+                    "Meta",
+                    "Shift"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "upload"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "nodeRef",
+              "files"
+            ],
+            "properties": {
+              "nodeRef": {
+                "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {
+                  "type": "string",
+                  "pattern": "^/",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "upload_via_picker"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "files"
+            ],
+            "properties": {
+              "nodeRef": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number",
+                "minimum": 0
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0
+              },
+              "files": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {
+                  "type": "string",
+                  "pattern": "^/",
+                  "maxLength": 4096
+                }
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "nodeRef"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "x"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "y"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "not": {
+                  "required": [
+                    "nodeRef"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "export_trigger"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "jobId",
+              "nodeRef",
+              "snapshotId",
+              "automaticDownloadConfirmed",
+              "downloadModeCheckedAt"
+            ],
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "nodeRef": {
+                "type": "string"
+              },
+              "automaticDownloadConfirmed": {
+                "const": true
+              },
+              "downloadModeCheckedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "export_download_status"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": [
+              "jobId"
+            ],
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

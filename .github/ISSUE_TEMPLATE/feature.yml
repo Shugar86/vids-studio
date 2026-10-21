@@ -1,0 +1,17 @@
+name: Feature idea / Предложение
+description: Propose a useful workflow / Предложите полезный сценарий
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Goal / Цель
+      description: Who needs it, what they are trying to do, and what blocks them / Кому нужно, какую задачу решает и что мешает сейчас
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected outcome / Ожидаемый результат
+      description: A concrete example and alternatives considered / Конкретный пример и рассмотренные варианты
+    validations:
+      required: true

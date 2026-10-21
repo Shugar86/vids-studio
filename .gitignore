@@ -1,0 +1,14 @@
+node_modules/
+__pycache__/
+*.pyc
+.runtime/
+test-results/
+*.log
+.env*
+dist/
+.venv/
+coverage/
+*.mp4
+*.webm
+*.sqlite*
+*.sock

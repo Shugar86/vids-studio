@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Слои ролика</title>
+<!--
+  Каркас слоёв для Google Vids. Копируй в vids-work/<slug>/layers/<бит>.html и наполняй под бит.
+  Это соглашения, а не стиль: облик задают токены из design.md ролика, а не значения ниже.
+
+  - Кадр 1080×1920. Каждый слой — элемент с классом layer и уникальным id, абсолютно позиционирован
+    в координатах полного кадра. render_layer.mjs --show <id> отдаёт прозрачный PNG на весь кадр:
+    в Vids проверь фактическую геометрию объекта — размер PNG не гарантирует размещение.
+  - Пример направляющих social (проверь под свою площадку): сверху 12%, снизу 22%, слева 5%, справа 12%. Полоса субтитров
+    y 1250–1470 остаётся пустой: туда Vids кладёт субтитры. Проверка — render_layer.mjs --guides.
+  - data-fit="N" на тексте — максимум N строк; рендер падает с кодом 3, если текст не влез.
+  - Шрифты локально: scripts/vendor_fonts.py → fonts/fonts.css рядом с этим файлом. Те же гарнитуры
+    выбери в Vids для живого текста, чтобы слой и титр Vids не спорили.
+  - Анимацию, порядок и тайминг слоёв задаёшь в Vids. Здесь только неподвижная конечная поза.
+-->
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  :root {
+    /* Из design.md: 4–6 именованных цветов и 1–2 гарнитуры. Заполни, не оставляй образцы. */
+    --ground: #F1F3EC;
+    --ink: #17211C;
+    --accent: #FFC92E;
+    --display: "Unbounded", sans-serif;
+    --ui: "Onest", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+  body { position: relative; font-family: var(--ui); color: var(--ink); }
+  .layer { position: absolute; }
+
+  /* Пример соглашений; замени содержимым бита. */
+  #headline { left: 84px; top: 240px; width: 860px; }
+  #headline h1 { font: 800 104px/1.04 var(--display); letter-spacing: -3px; }
+  #object { left: 120px; top: 660px; width: 600px; height: 360px; background: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="layer" id="headline"><h1 data-fit="2">Одна мысль бита</h1></div>
+  <div class="layer" id="object"></div>
+</body>
+</html>
