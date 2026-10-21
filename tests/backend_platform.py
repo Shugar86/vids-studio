@@ -6,12 +6,12 @@ import json
 import os
 from pathlib import Path
 import socket
-import tempfile
 import threading
 import unittest
 
 from backend_native import bridge
 from platform_support import ensure_private_directory, secure_open, assert_private_file, lock_file
+from platform_smoke import private_temporary_directory
 
 
 class TransportAuthenticationTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class TransportAuthenticationTests(unittest.TestCase):
         server, client = socket.socketpair()
         server.settimeout(2)
         client.settimeout(2)
-        host = bridge.Bridge(Path(tempfile.gettempdir()) / "unused", stdout=io.BytesIO())
+        host = bridge.Bridge(Path.home().resolve() / "unused", stdout=io.BytesIO())
         host.transport_secret = "b" * 64
         outcome = []
 
@@ -60,8 +60,8 @@ class TransportAuthenticationTests(unittest.TestCase):
 
 class PrivatePlatformTests(unittest.TestCase):
     def test_regular_private_file_and_two_independent_lock_handles(self):
-        with tempfile.TemporaryDirectory() as directory:
-            private = Path(directory).resolve() / "private"
+        with private_temporary_directory(Path.home().resolve()) as directory:
+            private = directory / "private"
             ensure_private_directory(private)
             first = secure_open(private / "owner.lock", os.O_CREAT | os.O_RDWR)
             second = secure_open(private / "owner.lock", os.O_CREAT | os.O_RDWR)
@@ -82,8 +82,8 @@ class PrivatePlatformTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Windows DACL behavior")
     def test_private_directory_rejects_a_foreign_read_grant_without_repair(self):
         import platform_support as security
-        with tempfile.TemporaryDirectory() as directory:
-            private = Path(directory) / "private"
+        with private_temporary_directory(Path.home().resolve()) as directory:
+            private = directory / "private"
             ensure_private_directory(private)
             descriptor = security.win32security.GetNamedSecurityInfo(str(private), security.win32security.SE_FILE_OBJECT, security.win32security.DACL_SECURITY_INFORMATION)
             acl = descriptor.GetSecurityDescriptorDacl()
@@ -97,8 +97,8 @@ class PrivatePlatformTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Windows filename aliases and alternate streams")
     def test_file_basename_aliases_are_rejected_before_read_or_creation(self):
         import platform_support as security
-        with tempfile.TemporaryDirectory() as directory:
-            private = Path(directory) / "private"
+        with private_temporary_directory(Path.home().resolve()) as directory:
+            private = directory / "private"
             ensure_private_directory(private)
             target = private / "existing.txt"
             security.create_private_file(target)
@@ -113,8 +113,7 @@ class PrivatePlatformTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Windows reparse/ACL checks run in native platform CI")
     def test_existing_shared_directory_and_symlink_file_are_not_repaired(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
+        with private_temporary_directory(Path.home().resolve()) as root:
             shared = root / "shared"
             shared.mkdir(mode=0o755)
             with self.assertRaises(PermissionError):

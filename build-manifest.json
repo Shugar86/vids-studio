@@ -107,7 +107,7 @@
     "tests/backend.test.mjs": "7ffae103939441d6c195bde8f2cb119a1caf1940088ad2efd1ab7900710854ef",
     "tests/backend_coordinator.py": "b3325c0fa96be5c8f5d4db1653f441ad12b2a83f57b95ceffc8f4c7b2b149f12",
     "tests/backend_native.py": "3b8342ae1c15d94296bdfb5a64a1fc7e8ab854341c44858e6c223b55d1499688",
-    "tests/backend_platform.py": "7e0e98e219760d6841e97978de55aa8ce5c924a59860e1438bfa9a93a2f730e8",
+    "tests/backend_platform.py": "395944c8af8c91de8c64a7a611b7a5a6e760b1f84145ce78392b5036fb3929dd",
     "tests/chrome-storage.mjs": "ae752591e495d8e1f6a7d113dae529ac2133feed66ccad4138466b1a366f9b6f",
     "tests/driver.integration.test.mjs": "f525854dd1252c29de6d689c64a0ebad8e3006fc858e275554497b0410af0f30",
     "tests/export-watch.test.mjs": "ea42c9400fc37ad83ee15da1c48501756c162fe6296042a566ec7e671a636fd1",
