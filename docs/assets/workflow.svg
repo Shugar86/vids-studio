@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="680" viewBox="0 0 800 680" role="img" aria-labelledby="title desc">
+  <title id="title">How Vids Studio works / Как работает Vids Studio</title>
+  <desc id="desc">Codex or Claude Code uses a local connector made of an MCP server, a Native Messaging host and a Chrome extension to operate the explicitly attached Google Vids tab. Actions travel to Vids; UI observations return to the agent. The working loop is observe, act, verify. Codex или Claude Code управляет явно подключённой вкладкой Google Vids через локальный коннектор: MCP-сервер, Native Messaging host и расширение Chrome. Цикл работы: наблюдение, действие, проверка.</desc>
+  <defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="m1 1 6 3-6 3" fill="none" stroke="#3c6d68" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+  <rect width="800" height="680" rx="14" fill="#eff4ef"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="40" y="57" fill="#153440" font-size="30" font-weight="700">How it works / Как это работает</text>
+    <rect x="40" y="88" width="720" height="122" rx="10" fill="#173844"/>
+    <text x="65" y="135" fill="#eaf5eb" font-size="34" font-weight="700">Codex / Claude Code</text>
+    <text x="65" y="179" fill="#b5d3ca" font-size="25">Creative skill / Творческий навык</text>
+    <path d="M389 223v31m22 0v-31" stroke="#3c6d68" stroke-width="2" marker-end="url(#arrow)" fill="none"/>
+    <rect x="40" y="268" width="720" height="145" rx="10" fill="#d4e8dd" stroke="#b6d0c3"/>
+    <text x="65" y="313" fill="#173d44" font-size="34" font-weight="700">Local connector</text>
+    <text x="65" y="350" fill="#3c6766" font-size="28">Локальный коннектор</text>
+    <text x="65" y="390" fill="#244e53" font-size="24">MCP server → Native host → Chrome extension</text>
+    <path d="M389 426v31m22 0v-31" stroke="#3c6d68" stroke-width="2" marker-end="url(#arrow)" fill="none"/>
+    <rect x="40" y="470" width="720" height="122" rx="10" fill="#173844"/>
+    <text x="65" y="517" fill="#eaf5eb" font-size="34" font-weight="700">Google Vids</text>
+    <text x="65" y="561" fill="#b5d3ca" font-size="25">Attached tab / Подключённая вкладка</text>
+    <text x="40" y="633" fill="#234d53" font-size="26">Observe → Act → Verify</text>
+    <text x="40" y="666" fill="#52716e" font-size="24">Наблюдение → Действие → Проверка</text>
+  </g>
+</svg>

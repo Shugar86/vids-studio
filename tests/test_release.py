@@ -30,6 +30,9 @@ class ReleaseTests(unittest.TestCase):
             'docs/en/install.md': 'English install',
             'docs/ru/install.md': 'Установка',
             'docs/assets/hero.svg': '<svg/>',
+            'docs/assets/workflow.svg': '<svg/>',
+            'docs/assets/extension-popup.en.png': 'Public English popup fixture',
+            'docs/assets/extension-popup.ru.png': 'Public Russian popup fixture',
             '.github/workflows/ci.yml': 'name: Test\n',
             'AGENTS.md': 'Canonical source contract',
             'CLAUDE.md': 'Canonical Claude development guidance',
@@ -95,14 +98,16 @@ class ReleaseTests(unittest.TestCase):
         for kind in ('source', 'codex', 'claude'):
             with zipfile.ZipFile(io.BytesIO(files[f'vids-studio-0.2.0-{kind}.zip'])) as archive:
                 names = {'/'.join(name.split('/')[1:]) for name in archive.namelist()}
-                for name in ('README.md', 'README.ru.md', 'docs/en/install.md', 'docs/ru/install.md', 'docs/assets/hero.svg'):
+                for name in ('README.md', 'README.ru.md', 'docs/en/install.md', 'docs/ru/install.md',
+                             'docs/assets/hero.svg', 'docs/assets/workflow.svg',
+                             'docs/assets/extension-popup.en.png', 'docs/assets/extension-popup.ru.png'):
                     self.assertIn(name, names)
                 for name in ('AGENTS.md', 'CLAUDE.md', '.github/workflows/ci.yml'):
                     self.assertEqual(name in names, kind == 'source')
 
     def test_allowlist_excludes_dependencies_secrets_runtime_and_unreviewed_notes(self):
         excluded = ('node_modules/private.json', '.env', '.runtime/jobs.sqlite', 'private.mp4',
-                    'server/.env', 'server/private.log', 'docs/private-notes.md',
+                    'server/.env', 'server/private.log', 'docs/private-notes.md', 'docs/assets/private-screenshot.png',
                     'skill/vids-director/.env', 'skill/vids-director/assets/export.mp4',
                     'scripts/private-script.py', '.github/workflows/.env')
         for name in excluded:

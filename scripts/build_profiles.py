@@ -23,7 +23,9 @@ PUBLIC_ROOT_FILES = ('README.md', 'README.ru.md', 'LICENSE', 'LICENSE.md',
                      'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md',
                      '.gitignore', '.gitattributes', '.editorconfig')
 PUBLIC_DOC_FILES = ('docs/profile-install.md', 'docs/jobs.md', 'docs/runtime-safety.md',
-                    'docs/VERIFICATION.md', 'VERIFICATION.md', 'docs/assets/hero.svg')
+                    'docs/VERIFICATION.md', 'VERIFICATION.md', 'docs/assets/hero.svg',
+                    'docs/assets/workflow.svg', 'docs/assets/extension-popup.en.png',
+                    'docs/assets/extension-popup.ru.png')
 PUBLIC_DIRECTORIES = {'docs/en': {'.md'}, 'docs/ru': {'.md'}}
 SOURCE_METADATA = ('AGENTS.md', 'CLAUDE.md')
 SOURCE_DIRECTORIES = {'.github/workflows': {'.yml', '.yaml'},

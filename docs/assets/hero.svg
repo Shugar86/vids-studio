@@ -1,31 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
-<title id="title">Vids Studio — Google Vids, directed by your agent</title>
-<desc id="desc">A dark editorial header with Codex and Claude profile badges, a video play icon and three separate timeline tracks.</desc>
-<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0d1b27"/><stop offset="1" stop-color="#152d38"/></linearGradient><linearGradient id="clip" x2="1" y2="1"><stop stop-color="#5ce1c3"/><stop offset="1" stop-color="#91f0cb"/></linearGradient></defs>
-<rect width="1200" height="420" rx="24" fill="url(#bg)"/>
-<path d="M0 346H1200M0 347H1200" stroke="#35505a" stroke-width="1"/>
-<g font-family="Arial, Helvetica, sans-serif">
-<text x="64" y="65" fill="#7ee4cc" font-size="14" font-weight="700" letter-spacing="3">LOCAL MCP · CREATIVE SKILLS · TWO PROFILES</text>
-<text x="60" y="149" fill="#f1f5f3" font-size="74" font-weight="700" letter-spacing="-3">Vids Studio</text>
-<text x="64" y="197" fill="#c4d5d6" font-size="24">Google Vids, directed by your agent.</text>
-<text x="64" y="232" fill="#9cb7ba" font-size="20">Your desktop stays yours.</text>
-<rect x="64" y="272" width="130" height="40" rx="20" fill="#214137" stroke="#6adab4"/>
-<circle cx="86" cy="292" r="5" fill="#6adab4"/><text x="101" y="298" fill="#e4fff3" font-size="17" font-weight="700">Codex</text>
-<rect x="208" y="272" width="140" height="40" rx="20" fill="#403831" stroke="#f1ad80"/>
-<circle cx="230" cy="292" r="5" fill="#f1ad80"/><text x="245" y="298" fill="#ffeadb" font-size="17" font-weight="700">Claude</text>
-<text x="64" y="389" fill="#b7cece" font-size="16">One shared core. Independent documents. Explicit control.</text>
-<text x="1052" y="389" fill="#6dd8bb" font-size="14" font-weight="700">RU / EN</text>
-</g>
-<g transform="translate(718 51)">
-<rect width="418" height="214" rx="18" fill="#07151f" stroke="#355563"/>
-<rect x="15" y="15" width="388" height="184" rx="10" fill="#17313e"/>
-<circle cx="209" cy="107" r="52" fill="url(#clip)"/>
-<path d="M198 81L232 107L198 133Z" fill="#112e31"/>
-<path d="M34 165H120M298 37H384" stroke="#5a7a83" stroke-width="2"/>
-<rect x="0" y="231" width="174" height="14" rx="4" fill="#6cddba"/><rect x="184" y="231" width="104" height="14" rx="4" fill="#396d65"/><rect x="298" y="231" width="120" height="14" rx="4" fill="#6cddba"/>
-<rect x="0" y="253" width="418" height="10" rx="3" fill="#f1ad80"/>
-<path d="M7 258H18L22 254L27 262L32 255L38 261L44 256H53L58 261L64 254L70 262L76 256H85L91 260L97 255L104 261L111 257H407" fill="none" stroke="#60483a" stroke-width="1.5"/>
-<rect x="40" y="271" width="110" height="8" rx="3" fill="#809baa"/><rect x="232" y="271" width="186" height="8" rx="3" fill="#809baa"/>
-<path d="M174 222V289" stroke="#fff" stroke-width="2"/><path d="M169 220H179L174 227Z" fill="#fff"/>
-</g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="514" viewBox="0 0 1200 514" role="img" aria-labelledby="title desc">
+  <title id="title">Vids Studio — create in Google Vids with Codex or Claude Code</title>
+  <desc id="desc">A bilingual film-strip composition. Vids Studio combines a creative skill and a local connector for Google Vids. Three illustrated shots share a timeline and a voice waveform; these are conceptual artwork, not editor screenshots. Создавайте в Google Vids с Codex или Claude Code: творческий навык и локальный коннектор.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#234c59"/><stop offset="1" stop-color="#132f3b"/></linearGradient>
+    <linearGradient id="object" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#c3f4d8"/><stop offset="1" stop-color="#74c6b2"/></linearGradient>
+    <clipPath id="shot-one"><rect x="48" y="242" width="270" height="176" rx="7"/></clipPath>
+    <clipPath id="shot-two"><rect x="330" y="242" width="460" height="176" rx="7"/></clipPath>
+    <clipPath id="shot-three"><rect x="802" y="242" width="350" height="176" rx="7"/></clipPath>
+    <path id="voice" d="M0 0h10l5-5 5 10 5-16 5 20 5-24 5 28 5-23 5 15 5-11 5 6h18l5-6 5 12 5-18 5 23 5-27 5 30 5-26 5 19 5-13 5 6h30"/>
+  </defs>
+  <rect width="1200" height="514" rx="18" fill="#10232e"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <path d="M48 48h28m-28 0v22m28-22v22M48 59h28" fill="none" stroke="#a7e4cc" stroke-width="2.5"/>
+    <path d="m49 48 6 11m4-11 6 11m4-11 6 11" stroke="#a7e4cc" stroke-width="2.5"/>
+    <text x="92" y="65" fill="#a7e4cc" font-size="22">Codex + Claude Code</text>
+    <text x="1149" y="65" fill="#b4c7c6" font-size="18" text-anchor="end">English / Русский</text>
+    <text x="43" y="170" fill="#f0f6ef" font-size="100" font-weight="700" letter-spacing="-5">Vids Studio</text>
+    <text x="654" y="131" fill="#edf4ec" font-size="28">Create in Google Vids.</text>
+    <text x="654" y="169" fill="#b9cdca" font-size="26">Создавайте в Google Vids.</text>
+    <text x="48" y="216" fill="#b9cdca" font-size="20">Creative skill + local connector</text>
+    <text x="654" y="216" fill="#b9cdca" font-size="20">Творческий навык + локальный коннектор</text>
+  </g>
+  <g clip-path="url(#shot-one)">
+    <path d="M48 242h270v176H48z" fill="url(#sky)"/>
+    <circle cx="255" cy="281" r="24" fill="#f2b49a"/>
+    <path d="m48 375 78-72 87 73 105-38v80H48z" fill="#487a7d"/>
+    <path d="m48 396 88-47 57 37 125-17v49H48z" fill="#315960"/>
+    <rect x="164" y="299" width="34" height="69" rx="17" fill="url(#object)"/>
+    <path d="M181 313v16" stroke="#e6fff0" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g clip-path="url(#shot-two)">
+    <path d="M330 242h460v176H330z" fill="#c7ded3"/>
+    <path d="M330 418V242h198z" fill="#a6cbbd"/>
+    <ellipse cx="589" cy="410" rx="112" ry="24" fill="#799e95" opacity=".55"/>
+    <g transform="rotate(20 570 338)">
+      <rect x="523" y="251" width="91" height="174" rx="45.5" fill="#315d61"/>
+      <rect x="511" y="245" width="91" height="174" rx="45.5" fill="url(#object)"/>
+      <path d="M556 268v36" stroke="#f0fff4" stroke-width="7" stroke-linecap="round"/>
+    </g>
+    <path d="M358 270h22m-22 0v22m404-22h-22m22 0v22m-404 98v-22m0 22h22m382 0h-22m22 0v-22" stroke="#406c68" stroke-width="1.5" fill="none"/>
+  </g>
+  <g clip-path="url(#shot-three)">
+    <path d="M802 242h350v176H802z" fill="#244b57"/>
+    <circle cx="984" cy="353" r="117" fill="#315f68"/>
+    <circle cx="984" cy="353" r="83" fill="#467a7e"/>
+    <ellipse cx="984" cy="406" rx="53" ry="10" fill="#153d49" opacity=".6"/>
+    <rect x="952" y="286" width="64" height="118" rx="32" fill="url(#object)"/>
+    <path d="M984 304v25" stroke="#edfff3" stroke-width="4" stroke-linecap="round"/>
+    <path d="m913 299-9-12m156 23 14-6m-23 69 12 8m-167-22-13 4" stroke="#f2b49a" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <path d="M48 431h270m12 0h460m12 0h350" stroke="#8cd7bd" stroke-width="5"/>
+  <g fill="none" stroke="#e9ab90" stroke-width="2" stroke-linejoin="round">
+    <use href="#voice" x="48" y="454"/><use href="#voice" x="228" y="454"/><use href="#voice" x="408" y="454"/>
+    <use href="#voice" x="588" y="454"/><use href="#voice" x="768" y="454"/><use href="#voice" x="948" y="454"/>
+  </g>
+  <path d="M652 234v242" stroke="#eff8ed" stroke-width="2"/>
+  <path d="m646 231 6 7 6-7z" fill="#eff8ed"/>
+  <g fill="#91aaa9" font-family="Arial, Helvetica, sans-serif" font-size="14">
+    <text x="48" y="493">Story → scenes → review</text>
+    <text x="1152" y="493" text-anchor="end">Замысел → сцены → проверка</text>
+  </g>
 </svg>
