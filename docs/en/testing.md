@@ -55,19 +55,30 @@ Fixtures test known failure modes, not every timing interleaving or future brows
 
 ## Read-only live smoke
 
-After the user reloads the extension, explicitly reconnects the intended document and refreshes MCP, run inside that profile:
+After reloading the extension and refreshing MCP in a suitable pause, explicitly attach an otherwise unassigned test document. Match its exact session/document in discovery; give this check only that popup pairing code. Store the code alone in an owned 0600 text file inside a private 0700 directory (Windows: an equivalent owner-only ACL). Run inside that profile:
 
 ```sh
-node scripts/live_smoke.mjs --document EXACT_DOCUMENT_ID
+node scripts/live_smoke.mjs --document EXACT_DOCUMENT_ID --session EXACT_SESSION_UUID \
+  --pairing-file /absolute/private/popup-code.txt --recovery /absolute/private/new-smoke.json
 ```
 
-Optionally add `--screenshot /absolute/new-file.png`; the path must be new and absolute. The script checks runtime compatibility and the exact document, acquires its own control, observes, receives a standard PNG response and releases control. It does not edit the movie. A failed release remains an explicit failed check. Its printed evidence omits raw control capabilities and full DOM content.
+Use `--pairing-file -` to read the code from stdin; never put a code or token in command arguments. Optionally add `--screenshot /absolute/new-file.png`; the path must be new and absolute. The script checks runtime compatibility and the exact document/session, generates its own binding credentials, saves them in the new private recovery file before claiming, acquires control, observes, receives a standard PNG response, then releases its control and binding. It neither edits the movie nor selects another document. A busy or already assigned document is rejected; the helper never borrows an existing binding.
+
+A failed or unconfirmed release remains a failed check. Keep the private recovery file while the result is unresolved; use its exact assignment and the regular binding/status tools to reconcile, without replaying input. After a successful check, the file can be deleted. The consumed popup code cannot claim a new task: explicitly disconnect/reconnect this tab for a new code. Printed evidence excludes capabilities and full DOM content. The old `--document ID` mode remains available only for a legacy single host; it fails closed on fleet discovery.
 
 Run this separately for each profile. A successful SDK smoke confirms the transport and current attachment. It does not prove that a previously open client chat refreshed its tools, or that the client's model followed the creative skill correctly.
 
 ## Current acceptance boundary
 
-The 0.3 implementation has automated coverage of both profiles and isolated browser mechanisms. The public package deliberately excludes private project content, local installation state and historical film screenshots.
+The 0.4 implementation has automated coverage of both profiles and isolated browser mechanisms. The public package deliberately excludes private project content, local installation state and historical film screenshots.
+
+### Ten concurrent Codex agents · 22 October 2026
+
+Runtime **0.4.0**, core build `343c32838c097496cf09da154b82de7d800108615b7ad8993000ed606334f370`: ten actual `codex exec` model processes ran concurrently against ten disposable Chrome pages through separate MCP clients and native hosts. All ten performed and verified their own edit; all eighty tool calls succeeded, controls and bindings were released, and the active cover tab and its input remained unchanged. The run completed at 21:37:27 UTC. Private capabilities and model transcripts are not published.
+
+The full Linux source suite and a freshly materialized Claude profile each passed 212 Node tests and 136 Python tests, with two Windows-only Python tests skipped. Separate integration checks cover a screenshot held past its deadline, targeted detach, cross-document refusal and export continuation after the MCP parent exits.
+
+These are real model processes operating local fixtures, **not ten completed Google Vids films**. Claude model behavior and live multi-film editing remain separate acceptance steps. Reproduce the optional model run with the command in [parallel sessions](parallel.md).
 
 <a id="codex-v4-export"></a>
 

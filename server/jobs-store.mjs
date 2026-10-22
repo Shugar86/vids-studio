@@ -115,9 +115,15 @@ export class JobStore {
       job.cancellation = 'stopping_further_steps_not_confirmed_google_cancel';
     });
   }
-  claimRecovery(id, token, instance, leaseHash) {
+  claimRecovery(id, token, instance, leaseHash, expected) {
     return this.change(id, token, job => {
       if (['succeeded', 'failed', 'cancelled'].includes(job.state)) throw jobError('JOB_ALREADY_TERMINAL', 'This job has already finished.');
+      // Native lease validation happens before this transaction. Another
+      // recovery may win during that await; it must not lose its new lease
+      // or local verification to a second caller that validated the old row.
+      if (!expected || job.instance !== expected.instance || (job.runnerEpoch || 0) !== (expected.runnerEpoch || 0) || job.leaseHash !== expected.leaseHash) {
+        throw jobError('JOB_RECOVERY_CONFLICT', 'Another recovery changed this job while its native lease was being checked. Read its current status; no observation, release or replay was performed by this request.');
+      }
       job.instance = instance; job.leaseHash = leaseHash; job.runnerEpoch = (job.runnerEpoch || 0) + 1;
       job.state = 'needs_reconciliation'; job.stage = 'inspecting_previous_outcome';
     });

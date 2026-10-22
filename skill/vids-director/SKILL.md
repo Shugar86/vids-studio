@@ -21,6 +21,13 @@ same direction, take acceptance and QA criteria.
   clipboard, another browser driver or token borrowing. When unavailable/busy,
   continue independent preparation. Do not substitute the Codex profile or
   silently switch providers/install dependencies.
+- For every video in the current profile, list attached sessions and match only this chat's exact
+  authorized document. Claim its one-time popup pairing code with your own
+  bindingId/bindingToken/intentId before acquiring control. Retain capabilities
+  privately; discovery, an owner label or idle lease does not grant ownership.
+  Read [parallel sessions](references/en/parallel-sessions.md) /
+  [параллельные сессии](references/parallel-sessions.md) for binding recovery,
+  capacity receipts and the shared monitor. Never choose the first/free tab.
 - Preserved Claude helpers for layers, website captures, captions and QA are in
   [English client tools](references/en/client-tools.md) /
   [инструменты Claude](references/client-tools.md). They complement the common

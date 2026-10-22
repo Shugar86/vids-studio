@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Vids Studio — управление выбранным видео",
-  "version": "0.3.0",
-  "description": "Локальный мост Codex для одной явно подключённой вкладки Google Vids.",
+  "version": "0.4.0",
+  "description": "Локальный мост Codex для независимого управления явно подключёнными видео Google Vids.",
   "minimum_chrome_version": "118",
   "permissions": [
     "activeTab",

@@ -20,6 +20,19 @@ Vids Studio connects Codex or Claude Code to **the Google Vids document you choo
 
 The skill provides the production method; the connector gives the agent eyes and hands inside the attached tab. Together they support work on story, shots, voice, captions, pacing and sound—using the features available in your Vids account. The bridge uses no system mouse, keyboard or clipboard, so it does not take over your desktop.
 
+## Several videos, one monitor
+
+The **0.4 development build** supports several explicitly attached documents per client, a private assignment for each chat, adaptive command limits and a shared local monitor for Codex and Claude. Start the monitor with `bun run monitor`; pause one video or the whole group without using the system mouse or keyboard. Export runners survive their MCP client's exit, with separately bounded local MP4 verification.
+
+[Connect 5–10 chats and understand the limits →](docs/en/parallel.md)
+
+<details><summary>Monitor preview · synthetic examples</summary>
+
+<img src="docs/assets/monitor/monitor-desktop-ru.png" alt="Vids Studio shared monitor" width="900">
+</details>
+
+The downloadable 0.3 release below predates these changes. Build the current source for 0.4; live Google Vids acceptance remains separate from isolated browser and real-agent fixture tests.
+
 ## Watch a real edit
 
 <p align="center">

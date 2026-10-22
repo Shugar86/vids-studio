@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Vids Studio — Monitor</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#videos" data-i18n="skip">К роликам</a>
+  <header class="masthead">
+    <div class="brand"><span class="brandmark" aria-hidden="true">▶</span> Vids Studio <span class="edition" data-i18n="monitor">Монитор</span></div>
+    <div class="header-tools"><span class="local-label" data-i18n="local">На этом компьютере</span><button id="language" class="quiet" type="button" aria-label="Switch language">EN</button></div>
+  </header>
+  <main>
+    <section class="overview" aria-labelledby="title">
+      <div><h1 id="title" data-i18n="title">Каждый ролик — на своём месте.</h1><p class="subtitle" data-i18n="subtitle">Общий обзор работы Codex и Claude. Без переключения ваших вкладок.</p></div>
+      <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Подключение…</span><small id="last-update"></small></div>
+    </section>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section class="control-strip" aria-label="Управление нагрузкой" id="controls">
+      <div class="admission"><strong id="admission-state" data-i18n="admission">Новые команды</strong><span id="admission-detail" data-i18n="admissionHelp">Пауза не отменяет уже отправленные действия.</span></div>
+      <div class="capacity"><label for="max-concurrency" data-i18n="parallelLimit">Предел одновременных команд</label><div><input id="max-concurrency" type="number" min="1" max="100" value="10" inputmode="numeric" disabled><button id="apply-limit" type="button" class="quiet" disabled data-i18n="apply">Применить</button></div><small id="effective-limit"></small></div>
+      <button id="pause-all" type="button" class="primary" disabled data-i18n="pauseAll">Приостановить новые команды</button>
+    </section>
+    <section class="resource-strip" aria-label="Ресурсы компьютера"><span id="memory"></span><span id="cpu"></span><span id="pressure"></span><span id="resource-age"></span><span id="media-budget"></span><span class="resource-note" data-i18n="resourceNote">Снимки и содержимое видео здесь не запрашиваются.</span></section>
+    <section id="videos" tabindex="-1" aria-labelledby="videos-title">
+      <div class="board-heading"><h2 id="videos-title" data-i18n="videos">Ролики</h2><span id="total-count" class="count">0</span><div class="filters" role="group" aria-label="Фильтр роликов"><button data-filter="all" aria-pressed="true" data-i18n="all">Все</button><button data-filter="attention" aria-pressed="false" data-i18n="attention">Требуют внимания</button><button data-filter="working" aria-pressed="false" data-i18n="working">В работе</button></div></div>
+      <div id="totals" class="totals" aria-live="polite"></div>
+      <div class="table-scroll" tabindex="0" role="region" aria-labelledby="videos-title"><table><thead><tr><th scope="col" data-i18n="video">Документ</th><th scope="col" data-i18n="state">Состояние</th><th scope="col" data-i18n="owner">Кто работает</th><th scope="col" data-i18n="pending">Незавершённые</th><th scope="col" data-i18n="updated">Обновлено</th><th scope="col"><span class="sr-only" data-i18n="actions">Действия</span></th></tr></thead><tbody id="rows"></tbody></table></div>
+      <div id="empty" class="empty" hidden><span class="empty-symbol" aria-hidden="true">▱</span><h3 id="empty-title"></h3><p id="empty-description"></p></div>
+    </section>
+    <section id="exports" aria-labelledby="exports-title" hidden>
+      <div class="board-heading"><h2 id="exports-title" data-i18n="exports">Экспорты MP4</h2><span id="export-count" class="count">0</span></div>
+      <p class="subtitle" data-i18n="exportsHelp">Сохранённые этапы экспорта остаются здесь после закрытия чата. Проверка файла не заменяет просмотр ролика.</p>
+      <p id="exports-notice" class="notice" hidden></p>
+      <div class="table-scroll" tabindex="0" role="region" aria-labelledby="exports-title"><table><thead><tr><th scope="col" data-i18n="video">Документ</th><th scope="col" data-i18n="exportStage">Этап экспорта</th><th scope="col" data-i18n="owner">Кто работает</th><th scope="col" data-i18n="updated">Обновлено</th></tr></thead><tbody id="export-rows"></tbody></table></div>
+    </section>
+    <footer><p data-i18n="footer">Состояния приходят от локальных подключений. Отсутствие свежих сведений не означает, что операция остановилась.</p><span id="schema-status" data-i18n="noProgress">Без выдуманных процентов готовности</span></footer>
+  </main>
+</body>
+</html>

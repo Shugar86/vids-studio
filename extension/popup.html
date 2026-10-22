@@ -10,9 +10,10 @@
   <main>
     <header><span class="mark" aria-hidden="true">▶</span><div><h1 id="name">Vids Studio</h1><p id="subtitle">Google Vids · local bridge</p></div><button id="language" class="language" type="button" aria-label="Switch language">RU</button></header>
     <p id="state" class="state" role="status">Checking connection…</p>
-    <p id="document" class="document"></p>
     <p id="hint" class="hint"></p>
-    <div class="buttons"><button id="attach" type="button">Connect this tab</button><button id="disconnect" class="secondary" type="button" hidden>Disconnect</button></div>
+    <div class="buttons"><button id="attach" type="button">Connect this tab</button></div>
+    <ul id="connections" class="connections" aria-label="Connected videos"></ul>
+    <section id="pairing" class="pairing" hidden><p id="pairing-hint"></p><textarea id="pairing-code" readonly spellcheck="false" aria-label="One-use pairing code"></textarea></section>
     <p id="error" class="error" role="alert" hidden></p>
     <footer id="footer"></footer>
   </main>

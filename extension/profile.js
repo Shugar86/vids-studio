@@ -12,11 +12,11 @@ export const PROFILE = Object.freeze({
   "badgeText": "ON",
   "badgeColor": "#176B50",
   "extensionName": "Vids Studio — управление выбранным видео",
-  "extensionDescription": "Локальный мост Codex для одной явно подключённой вкладки Google Vids.",
+  "extensionDescription": "Локальный мост Codex для независимого управления явно подключёнными видео Google Vids.",
   "extensionKey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxRbbOB91M96Zymgh0rkzXmDwe8Tde6oH5UhFcoLlb2PG949EhFuqwPKewPlgRBUgVufiro3+mA66muliNHNy3vAKCyH4tjMY9gLr2gwIIr7lgXthghvLs8cBNlxJprNocEVGKJJ3KiYE/AmwD3mUay0r222EhJFuWcIHypKN+Ci0Aq78frBzl2u+ikBMEKzQRAVgJs7EkQVctgwiAIe0TEENMiZ1Ou4wqoDUOWEl4M5IcM4Jyz9rwOKffUrQWhSQJIZOp551ips5lGP3YvnBZgrbSrYRKzu+tHWYjL/weyWFWap7UhAQvQhrhDeocTdg7Qvfz1zvaPgtqg8RTaRLAQIDAQAB",
-  "version": "0.3.0",
-  "buildId": "caddb7a88a31b4fe0a1a2eff023cd75da05986e5edee3bbd63cc3c09bcc9db57",
-  "coreBuildId": "caddb7a88a31b4fe0a1a2eff023cd75da05986e5edee3bbd63cc3c09bcc9db57",
+  "version": "0.4.0",
+  "buildId": "343c32838c097496cf09da154b82de7d800108615b7ad8993000ed606334f370",
+  "coreBuildId": "343c32838c097496cf09da154b82de7d800108615b7ad8993000ed606334f370",
   "protocol": 3,
   "extensionProtocol": 2
 });

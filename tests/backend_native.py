@@ -149,7 +149,7 @@ class NativeTests(FixtureCase):
             with lock:
                 callbacks[bridge.signal.SIGTERM](bridge.signal.SIGTERM, None)
 
-        with patch.object(sys, "argv", ["bridge"]), patch.object(bridge.Bridge, "bind", bind), \
+        with patch.object(sys, "argv", ["bridge", "--socket", "/unused"]), patch.object(bridge.Bridge, "bind", bind), \
              patch.object(bridge.Bridge, "serve"), patch.object(bridge, "read_native", interrupted_read), \
              patch.object(bridge.signal, "signal", lambda signum, callback: callbacks.update({signum: callback})):
             with self.assertRaises(SystemExit) as stopped:

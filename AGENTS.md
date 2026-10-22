@@ -6,7 +6,7 @@
 
 ### Назначение и границы
 
-Vids Studio связывает Codex или Claude Code с одной явно подключённой вкладкой Google Vids. Локальный MCP-сервер, native host и Chrome-расширение выполняют действия; навык задаёт процесс создания и проверки видео. Это канонический публичный исходный код. Установленные профили и процессы пользователя — отдельное состояние.
+Vids Studio связывает Codex или Claude Code с явно подключёнными вкладками Google Vids. Локальный MCP-сервер, native host и Chrome-расширение выполняют действия; навык задаёт процесс создания и проверки видео. Это канонический публичный исходный код. Установленные профили и процессы пользователя — отдельное состояние.
 
 Сначала прочитайте затронутый код и соответствующие [руководства](docs/ru/architecture.md). Правьте исходник, затем собирайте профиль. Не исправляйте установку пользователя вместо исходника и не обновляйте её в рамках обычных тестов. Сохраняйте чужие изменения и ограничивайте diff задачей.
 
@@ -14,7 +14,7 @@ Vids Studio связывает Codex или Claude Code с одной явно �
 
 | Путь | Ответственность и источник истины |
 | --- | --- |
-| `server/` | MCP-инструменты, локальный транспорт, задания экспорта |
+| `server/`, `dashboard/` | MCP-инструменты, адресный транспорт, отдельные export runners и общий монитор |
 | `native/` | Native messaging, владение документом, координация и восстановление |
 | `extension/` | MV3-расширение, работа с выбранной вкладкой, popup RU/EN |
 | `profiles/codex.json`, `profiles/claude.json` | Раздельные идентичности клиентов; сохраняйте extension key, native host, MCP name и namespace |
@@ -52,7 +52,7 @@ Vids Studio связывает Codex или Claude Code с одной явно �
 
 ### Purpose and scope
 
-Vids Studio connects Codex or Claude Code to one explicitly attached Google Vids tab. A local MCP server, native host and Chrome extension perform actions; the skill guides video creation and review. This repository is the canonical public source. Installed profiles and running user processes are separate states.
+Vids Studio connects Codex or Claude Code to explicitly attached Google Vids tabs. A local MCP server, native host and Chrome extension perform actions; the skill guides video creation and review. This repository is the canonical public source. Installed profiles and running user processes are separate states.
 
 Read the affected code and relevant [guides](docs/en/architecture.md) first. Edit the source, then materialize a profile. Do not patch a user's installation instead of the source or update it as part of routine tests. Preserve unrelated edits and keep the diff scoped to the task.
 
@@ -60,7 +60,7 @@ Read the affected code and relevant [guides](docs/en/architecture.md) first. Edi
 
 | Path | Responsibility and source of truth |
 | --- | --- |
-| `server/` | MCP tools, local transport and export jobs |
+| `server/`, `dashboard/` | MCP tools, addressed transport, isolated export runners and the shared monitor |
 | `native/` | Native messaging, document ownership, coordination and recovery |
 | `extension/` | MV3 extension, attached-tab operations and EN/RU popup |
 | `profiles/codex.json`, `profiles/claude.json` | Distinct client identities; preserve extension keys, native host names, MCP names and namespaces |

@@ -1,5 +1,7 @@
 # Architecture, permissions and data
 
+[Version 0.4: multiple attachments, chat bindings, resource admission and a shared monitor](parallel.md). The diagrams below describe one addressed session; several such sessions can coexist.
+
 [English](architecture.md) · [Русский](../ru/architecture.md) · [Home](../../README.md)
 
 Vids Studio is local infrastructure for an AI client to operate one user-selected Google Vids tab. It is an unofficial UI bridge, not a Google API integration. Google remains responsible for the editor, account permissions, generation and rendering.

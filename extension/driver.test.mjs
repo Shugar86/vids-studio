@@ -206,7 +206,7 @@ test("unsupported background rendering fails attachment and detaches before nati
   assert.equal(f.driver.status().attached, false);
   assert.equal(f.calls.filter(([method]) => method === 'detach').length, 1);
   assert.equal(f.nativeMessages.length, 0);
-  assert.equal(stored.vidsStudioActiveBindingV1, undefined);
+  assert.equal(stored.vidsStudioActiveBindingsV2, undefined);
   assert.equal(f.calls.some(([method]) => method.startsWith('Input.')), false);
 });
 
@@ -229,7 +229,7 @@ test("revocation precedes detach, but durable fence is published only after deta
   const stored = persistentStorage(f);
   await f.driver.attach(f.tab);
   const sessionId = f.driver.status().sessionId;
-  assert.equal(stored.vidsStudioActiveBindingV1.sessionId, sessionId);
+  assert.equal(stored.vidsStudioActiveBindingsV2[0].sessionId, sessionId);
   let finishDetach;
   f.api.debugger.detach = () => new Promise(resolve => { finishDetach = resolve; });
   const pending = f.driver.detach();
@@ -239,7 +239,7 @@ test("revocation precedes detach, but durable fence is published only after deta
   assert.equal((await f.request("observe", {}, {sessionId})).error.code, "NOT_ATTACHED");
   finishDetach();
   await pending;
-  assert.equal(stored.vidsStudioActiveBindingV1, undefined);
+  assert.equal(stored.vidsStudioActiveBindingsV2, undefined);
   assert.equal(stored.vidsStudioFencesV1[0].sessionId, sessionId);
   assert.equal(stored.vidsStudioFencesV1[0].fenced, true);
   assert.equal(f.nativeMessages.at(-1).fenceReceipts[0].sessionId, sessionId);
@@ -253,7 +253,7 @@ test("failed detach retains the binding and blocks explicit reattachment on unre
   f.api.debugger.detach = async () => { throw new Error("Permission denied"); };
   await f.driver.detach();
   assert.equal(stored.vidsStudioFencesV1, undefined);
-  assert.equal(stored.vidsStudioActiveBindingV1.sessionId, sessionId);
+  assert.equal(stored.vidsStudioActiveBindingsV2[0].sessionId, sessionId);
   const attaches = f.calls.filter(call => call[0] === "attach").length;
   await assert.rejects(f.driver.attach(f.tab), /Could not fence/);
   assert.equal(f.calls.filter(call => call[0] === "attach").length, attaches);
@@ -711,7 +711,7 @@ test("a screenshot held beyond the old hard deadline preserves attachment and fr
   context.mock.timers.tick(30000);
   assert.equal(f.driver.status().attached, true);
   assert.equal(f.driver.status().sessionId, sessionId);
-  assert.equal(stored.vidsStudioActiveBindingV1.sessionId, sessionId);
+  assert.equal(stored.vidsStudioActiveBindingsV2[0].sessionId, sessionId);
   assert.equal(stored.vidsStudioFencesV1, undefined);
   assert.equal(f.calls.some(([method]) => method === "detach"), false);
   assert.equal(f.nativeMessages.some(message => message.event === "detached"), false);
@@ -962,7 +962,7 @@ for (const completion of ["resolve", "reject"]) {
     assert.deepEqual(status.recovery.blocks, ["mutations"]);
     assert.equal(status.recovery.requiresReconciliation, true);
     assert.equal(status.recovery.requiresFreshObservation, true);
-    assert.equal(stored.vidsStudioActiveBindingV1.sessionId, sessionId);
+    assert.equal(stored.vidsStudioActiveBindingsV2[0].sessionId, sessionId);
     assert.equal(stored.vidsStudioFencesV1, undefined);
     assert.equal(f.calls.some(([method]) => method === "detach"), false);
 

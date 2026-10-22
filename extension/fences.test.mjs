@@ -45,3 +45,31 @@ test('fence retention is bounded and carries no capabilities', async () => {
   assert.equal(receipts[0].sessionId, 's6');
   assert.equal(Object.hasOwn(receipts[0], 'controlToken'), false);
 });
+
+test('parallel attachment writes and fence receipts retain every independent session', async () => {
+  const f = fixture();
+  const bindings = Array.from({length: 10}, (_, index) => ({profileId:'codex',tabId:index+1,sessionId:`fleet-${index}`,documentId:`video-${index}`}));
+  await Promise.all(bindings.map(binding => rememberBinding(f.api, binding)));
+  assert.equal(f.data.vidsStudioActiveBindingsV2.length, 10);
+  await Promise.all(bindings.map(binding => recordFence(f.api, binding)));
+  assert.equal((await readFences(f.api)).length, 10);
+});
+
+test('legacy binding migration and chosen-tab recovery never detach other persisted tabs', async () => {
+  const f = fixture();
+  f.data.vidsStudioActiveBindingV1 = {profileId:'codex',tabId:7,sessionId:'legacy',documentId:'legacy-video'};
+  await rememberBinding(f.api, {profileId:'codex',tabId:8,sessionId:'healthy',documentId:'healthy-video'});
+  assert.equal(f.data.vidsStudioActiveBindingV1, undefined);
+  assert.equal(f.data.vidsStudioActiveBindingsV2.length, 2);
+  await recoverBinding(f.api, 'codex', 7);
+  assert.deepEqual(f.detached, [{tabId:7}]);
+  assert.deepEqual(f.data.vidsStudioActiveBindingsV2.map(item => item.sessionId), ['healthy']);
+  assert.deepEqual((await readFences(f.api)).map(item => item.sessionId), ['legacy']);
+});
+
+test('ambiguous legacy single-driver recovery refuses to revoke multiple tabs', async () => {
+  const f = fixture();
+  await Promise.all([7,8].map(tabId => rememberBinding(f.api, {profileId:'codex',tabId,sessionId:`s${tabId}`,documentId:`d${tabId}`})));
+  await assert.rejects(recoverBinding(f.api, 'codex'), /select the tab/);
+  assert.deepEqual(f.detached, []);
+});

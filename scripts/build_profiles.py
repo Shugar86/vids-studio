@@ -12,10 +12,11 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-DIRECTORIES = ('native', 'server', 'extension', 'scripts', 'tests', 'profiles')
+DIRECTORIES = ('native', 'server', 'extension', 'scripts', 'tests', 'profiles', 'dashboard')
 GENERATED = {'profile.json', 'build-manifest.json', 'extension/profile.js'}
 SOURCE_SUFFIXES = {'native': {'.py'}, 'server': {'.mjs'}, 'extension': {'.js', '.mjs', '.json', '.html', '.css'},
-                   'scripts': {'.py', '.mjs'}, 'tests': {'.py', '.mjs'}, 'profiles': {'.json'}}
+                   'scripts': {'.py', '.mjs'}, 'tests': {'.py', '.mjs'}, 'profiles': {'.json'},
+                   'dashboard': {'.html', '.css', '.js'}}
 SKILL_DIRECTORIES = {'references': {'.md'}, 'scripts': {'.py', '.mjs'},
                      'tests': {'.py', '.mjs'}, 'agents': {'.yaml', '.yml'},
                      'assets': {'.html', '.css', '.svg', '.png', '.jpg', '.webp', '.json'}}
@@ -33,7 +34,7 @@ PUBLIC_DOC_FILES = ('docs/profile-install.md', 'docs/jobs.md', 'docs/runtime-saf
                     'site/assets/sasha-and-the-lamp-v5.mp4',
                     'site/assets/sasha-and-the-lamp-v5.jpg',
                     'site/assets/sasha-and-the-lamp-v5.en.vtt')
-PUBLIC_DIRECTORIES = {'docs/en': {'.md'}, 'docs/ru': {'.md'}}
+PUBLIC_DIRECTORIES = {'docs/en': {'.md'}, 'docs/ru': {'.md'}, 'docs/assets/monitor': {'.png'}}
 SOURCE_METADATA = ('AGENTS.md', 'CLAUDE.md')
 SOURCE_DIRECTORIES = {'.github/workflows': {'.yml', '.yaml'},
                       '.github/ISSUE_TEMPLATE': {'.md', '.yml', '.yaml'}}
@@ -125,7 +126,7 @@ def source_files(source):
                 continue
             if any(part.startswith('.') for part in path.relative_to(source).parts):
                 continue
-            if directory == 'scripts' and path.name not in ('setup.py', 'build_profiles.py', 'build_release.py', 'live_smoke.mjs'):
+            if directory == 'scripts' and path.name not in ('setup.py', 'build_profiles.py', 'build_release.py', 'live_smoke.mjs', 'parallel_smoke.mjs'):
                 continue
             if directory == 'profiles' and path.name not in ('codex.json', 'claude.json'):
                 continue

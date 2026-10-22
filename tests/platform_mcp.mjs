@@ -9,13 +9,14 @@ import net from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {spawn, execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {randomUUID} from 'node:crypto';
+import {randomUUID, randomBytes} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {JobStore, tokenHash} from '../server/jobs-store.mjs';
 import {verifyExport} from '../server/jobs-media.mjs';
 import {bridgeRequest} from '../server/bridge-client.mjs';
+import {withMediaBudget} from '../server/media-budget.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const temporary = process.env.VIDS_PLATFORM_SMOKE_DIR;
@@ -53,20 +54,25 @@ async function connect(host, clients) {
   const client = new Client({name: `${host.name}-native-os-smoke`, version: '1'});
   await client.connect(new StdioClientTransport({command: process.execPath,
     args: [path.join(host.target, 'server/index.mjs')],
-    env: {...process.env, ...profileEnvironments[host.name], VIDS_STUDIO_SOCKET: host.endpoint}}));
+    env: {...process.env, ...profileEnvironments[host.profile.id], VIDS_STUDIO_SOCKET: host.baseEndpoint || host.endpoint}}));
   clients.push(client);
   await until(async () => {
     assert.equal(host.child.exitCode, null, host.errors());
-    const status = await call(client, 'diagnostics');
-    return status.compatibility?.ready === true;
+    const status = await call(client, 'diagnostics', host.fleet ? {sessionId: host.sessionId} : {});
+    return host.fleet ? status.fleet === true && status.runtime?.host?.buildId === host.profile.buildId : status.compatibility?.ready === true;
   }, `${host.name} native host readiness`);
   return client;
 }
 
-async function startHost(name, target, hosts, {documentId = `document-${name}`, fences = [], launcher} = {}) {
+async function startHost(name, target, hosts, {documentId = `document-${name}`, fences = [], launcher, fleet = false} = {}) {
   const profile = JSON.parse(await fs.readFile(path.join(target, 'profile.json'), 'utf8'));
-  const endpoint = path.join(temporary, `${name}-endpoint`, process.platform === 'win32' ? 'bridge.json' : 'bridge.sock');
-  const args = ['--socket', endpoint, '--registry', registry];
+  const sessionId = fleet ? randomUUID() : `session-${name}`;
+  // Keep the complete macOS socket pathname below its 104-byte limit. Every
+  // worker in one profile shares only its base directory, never its endpoint.
+  const baseEndpoint = path.join(temporary, fleet ? (profile.id === 'codex' ? 'fc' : 'fl') : `${name}-endpoint`, process.platform === 'win32' ? 'bridge.json' : 'bridge.sock');
+  const endpoint = fleet ? path.join(path.dirname(baseEndpoint), 'sessions', `${sessionId}.${process.platform === 'win32' ? 'json' : 'sock'}`) : baseEndpoint;
+  const pairingTicket = fleet ? randomBytes(32).toString('hex') : null;
+  const args = [...(fleet ? [] : ['--socket', endpoint]), '--registry', registry];
   let command = python, parameters = [path.join(target, 'native/bridge.py'), ...args], options = {};
   if (launcher && process.platform === 'win32') {
     // cmd.exe is required for the generated Chrome native-host .cmd launcher.
@@ -79,9 +85,10 @@ async function startHost(name, target, hosts, {documentId = `document-${name}`, 
     command = launcher;
     parameters = args;
   }
-  const child = spawn(command, parameters, {stdio: ['pipe', 'pipe', 'pipe'], ...options});
+  const child = spawn(command, parameters, {stdio: ['pipe', 'pipe', 'pipe'],
+    env: {...process.env, VIDS_STUDIO_SOCKET: baseEndpoint}, ...options});
   let buffer = Buffer.alloc(0), stderr = '', sequence = 0, held = null, parseError = null;
-  let binding = {attached: true, sessionId: `session-${name}`, documentId,
+  let binding = {attached: true, sessionId, documentId, capabilities: ['observe', 'screenshot'],
     runtime: {extension: {version: profile.version, buildId: profile.buildId,
       profileId: profile.id, protocol: profile.extensionProtocol}}};
   const sent = [];
@@ -105,6 +112,7 @@ async function startHost(name, target, hosts, {documentId = `document-${name}`, 
         const request = JSON.parse(buffer.subarray(4, length + 4).toString('utf8'));
         buffer = buffer.subarray(length + 4);
         sent.push(request);
+        if (request.type === 'event') { assert.equal(request.event, 'pairing_claimed'); continue; }
         if (request.method === 'type_text' && request.params.text === 'hold-unknown') { held = request; continue; }
         const result = request.method === 'status' ? binding
           : request.method === 'observe' ? {snapshotId: `snapshot-${++sequence}`, nodes: [{ref: 'n1', role: 'textbox', name: unicode}]}
@@ -114,15 +122,22 @@ async function startHost(name, target, hosts, {documentId = `document-${name}`, 
       }
     } catch (error) { parseError = error; }
   });
-  const host = {name, target, profile, endpoint, child, sent, held: () => held,
+  const host = {name, target, profile, endpoint, baseEndpoint, fleet, sessionId, pairingTicket, documentId, child, sent, held: () => held,
     errors: () => stderr || parseError?.stack || '',
+    disconnectFenced() {
+      deliver({v: profile.extensionProtocol, type: 'event', event: 'detached',
+        status: {...binding, attached: false, sessionId: null, documentId: null},
+        fenceReceipts: [{fenced: true, profileId: profile.id, sessionId: binding.sessionId, documentId: binding.documentId}]});
+      child.stdin.end();
+    },
     rebind(nextDocument, receipts = []) {
       binding = {...binding, sessionId: `${binding.sessionId}-new`, documentId: nextDocument};
       deliver({v: profile.extensionProtocol, type: 'hello', status: binding, fenceReceipts: receipts});
       return binding.sessionId;
     }};
   hosts.push(host);
-  deliver({v: profile.extensionProtocol, type: 'hello', status: binding, fenceReceipts: fences});
+  deliver({v: profile.extensionProtocol, type: 'hello', status: binding, fenceReceipts: fences,
+    ...(fleet ? {fleet: {browserInstanceId: randomUUID(), pairingTicket}} : {})});
   return host;
 }
 
@@ -200,7 +215,7 @@ test('source and installed profiles preserve native framing, control, arbitratio
       assert.equal(recorded.initial_outcome, 'unknown');
       assert.equal(recorded.latest_outcome, 'unknown');
     } finally { db.close(); }
-    assert.equal(hosts.flatMap(host => host.sent).filter(request => request.params.text === 'hold-unknown').length, 1);
+    assert.equal(hosts.flatMap(host => host.sent).filter(request => request.params?.text === 'hold-unknown').length, 1);
   } finally {
     for (const client of clients) await client.close().catch(() => {});
     for (const host of hosts) {
@@ -310,3 +325,107 @@ test('Windows rejects a stale-port impersonator before sending a browser request
       await new Promise(resolve => server.close(resolve));
     }
   });
+
+
+test('native fleet endpoints route both installed profiles, preserve bindings and reject stale session paths', {timeout: 120000}, async () => {
+  const hosts = [], clients = [];
+  const assignments = [];
+  try {
+    for (const name of ['codex', 'claude']) {
+      const host = await startHost(`fleet-${name}`, profileTargets[name], hosts, {launcher: launchers[name], fleet: true});
+      const client = await connect(host, clients);
+      assert.equal(await fs.stat(host.baseEndpoint).then(() => true, () => false), false, 'Fleet must not publish a legacy singleton endpoint');
+      await exec(python, [path.join(root, 'native/platform_support.py'), process.platform === 'win32' ? 'verify-file' : 'ensure-directory', process.platform === 'win32' ? host.endpoint : path.dirname(host.endpoint)]);
+      const binding = {bindingId: randomUUID(), bindingToken: randomBytes(32).toString('base64url'), intentId: randomUUID(),
+        expectedDocumentId: host.documentId, ownerLabel: `${name} ${unicode}`};
+      const claimed = await call(client, 'claim_attachment', {...binding, sessionId: host.sessionId, pairingTicket: host.pairingTicket});
+      assert.equal(claimed.result?.sessionId, host.sessionId, JSON.stringify(claimed));
+      const acquired = await call(client, 'acquire_control', {...binding, sessionId: host.sessionId});
+      assert.equal(acquired.result?.mode, 'write', JSON.stringify(acquired));
+      const control = {sessionId: host.sessionId, controlToken: acquired.result.controlToken};
+      assert.equal((await call(client, 'observe', control)).result.nodes[0].name, unicode);
+      assignments.push({host, client, binding, control});
+    }
+    for (const {host, client} of assignments) {
+      const listed = await call(client, 'list_sessions');
+      assert.ok(listed.sessions.some(item => item.sessionId === host.sessionId));
+      assert.ok(listed.sessions.every(item => item.profileId === host.profile.id));
+      for (const {binding, control, host: candidate} of assignments) {
+        for (const secret of [binding.bindingToken, control.controlToken, candidate.pairingTicket]) {
+          assert.equal(JSON.stringify(listed).includes(secret), false, 'Discovery leaked a capability');
+        }
+      }
+    }
+    const [codex, claude] = assignments;
+    const before = codex.host.sent.length;
+    assert.equal((await call(codex.client, 'observe', {...codex.control, controlToken: claude.control.controlToken})).error.code, 'CONTROL_BUSY');
+    assert.equal(codex.host.sent.length, before);
+    const duplicate = await startHost('duplicate-document', profileTargets.claude, hosts, {fleet: true, documentId: codex.host.documentId});
+    const duplicateClient = await connect(duplicate, clients);
+    const rejected = await call(duplicateClient, 'claim_attachment', {sessionId: duplicate.sessionId, pairingTicket: duplicate.pairingTicket,
+      expectedDocumentId: codex.host.documentId, bindingId: randomUUID(), bindingToken: randomBytes(32).toString('base64url'), intentId: randomUUID(), ownerLabel: 'must not replace Codex'});
+    assert.equal(rejected.error.code, 'DOCUMENT_ALREADY_BOUND');
+
+    await exec(python, [path.join(root, 'native/fleet.py'), 'policy', '--paused', 'true']);
+    const paused = await call(codex.client, 'screenshot', codex.control);
+    assert.equal(paused.error.code, 'FLEET_PAUSED');
+    assert.equal((await call(codex.client, 'observe', codex.control)).result.nodes[0].name, unicode);
+    await exec(python, [path.join(root, 'native/fleet.py'), 'policy', '--paused', 'false']);
+    assert.equal((await call(codex.client, 'release_control', codex.control)).result.released, true);
+    codex.host.disconnectFenced(); await exited(codex.host.child);
+    assert.equal(await fs.stat(codex.host.endpoint).then(() => true, () => false), false);
+    const stale = await call(codex.client, 'observe', codex.control);
+    assert.equal(stale.error.code, 'NOT_CONNECTED', 'An old session must never route to another worker');
+
+    const renewed = await startHost('resumed-codex', profileTargets.codex, hosts, {fleet: true, documentId: codex.host.documentId, launcher: launchers.codex});
+    const renewedClient = await connect(renewed, clients);
+    const resumed = await call(renewedClient, 'resume_binding', {...codex.binding, sessionId: renewed.sessionId, pairingTicket: renewed.pairingTicket});
+    assert.equal(resumed.result?.sessionId, renewed.sessionId, JSON.stringify(resumed));
+    const resumedControl = await call(renewedClient, 'acquire_control', {...codex.binding, sessionId: renewed.sessionId});
+    assert.equal(resumedControl.result?.mode, 'write', JSON.stringify(resumedControl));
+    await call(renewedClient, 'release_control', {sessionId: renewed.sessionId, controlToken: resumedControl.result.controlToken});
+    assert.equal((await call(renewedClient, 'release_binding', {...codex.binding, sessionId: renewed.sessionId})).result.released, true);
+    await call(claude.client, 'release_control', claude.control);
+  } finally {
+    await exec(python, [path.join(root, 'native/fleet.py'), 'policy', '--paused', 'false']);
+    for (const client of clients) await client.close().catch(() => {});
+    for (const host of hosts) {
+      if (host.child.exitCode === null && host.child.signalCode === null) {
+        host.child.stdin.end(); const timer = setTimeout(() => host.child.kill('SIGKILL'), 5000);
+        await exited(host.child); clearTimeout(timer);
+      }
+      assert.equal(host.errors(), '', `${host.name} native host errors`);
+    }
+  }
+});
+
+test('native media admission serializes workers, retains orphan markers and verifies private registry ACLs', {timeout: 60000}, async t => {
+  const fleet = path.join(temporary, 'media-policy'), directory = path.join(temporary, 'media-permits');
+  const env = {...process.env, VIDS_STUDIO_PYTHON: python, VIDS_STUDIO_FLEET_DIR: fleet, VIDS_STUDIO_MEDIA_BUDGET_DIR: directory};
+  await exec(python, [path.join(root, 'native/fleet.py'), 'policy', '--max-concurrency', '1'], {env});
+  let active = 0, maximum = 0;
+  await Promise.all([0, 1, 2].map(index => withMediaBudget({jobId: `native-${index}`, env, waitSeconds: 15}, async () => {
+    maximum = Math.max(maximum, ++active); await pause(50); active--;
+  })));
+  assert.equal(maximum, 1);
+  assert.equal((await fs.readdir(directory)).filter(file => file.endsWith('.json')).length, 0);
+
+  const helper = spawn(python, [path.join(root, 'native/media_budget.py'), 'acquire', '--wait-seconds', '5'], {env, stdio: ['pipe', 'pipe', 'pipe']});
+  t.after(() => { helper.stdin.destroy(); if (helper.exitCode === null && helper.signalCode === null) helper.kill(); });
+  let output = '', errors = '';
+  helper.stderr.on('data', data => {errors += data;});
+  helper.stdout.on('data', data => {output += data;});
+  helper.stdin.write(JSON.stringify({jobId: 'native-lost-owner', ownerPid: process.pid}) + '\n');
+  await until(() => output.includes('"event":"acquired"'), 'native media permit acquisition');
+  const permit = output.split('\n').filter(Boolean).map(JSON.parse).find(item => item.event === 'acquired');
+  helper.stdin.end(); await exited(helper); assert.equal(errors, '');
+  await assert.rejects(withMediaBudget({jobId: 'must-not-replace', env, waitSeconds: 2}, async () => assert.fail('Orphan permit was silently reused')),
+    error => error.code === 'MEDIA_PERMIT_UNCONFIRMED');
+  await exec(python, [path.join(root, 'native/media_budget.py'), 'clear', '--slot', String(permit.slot), '--lease-id', permit.leaseId, '--acknowledge-media-stopped'], {env});
+  const snapshot = JSON.parse((await exec(python, [path.join(root, 'native/media_budget.py'), 'status'], {env})).stdout);
+  assert.equal(snapshot.result.slots.length, 0);
+  const db = path.join(fleet, 'fleet.sqlite3');
+  await exec(python, [path.join(root, 'tests/platform_smoke.py'), '--widen-acl', db]);
+  await assert.rejects(exec(python, [path.join(root, 'native/fleet.py'), 'snapshot'], {env}),
+    error => error.code === 1 && JSON.parse(error.stdout).error?.code === 'FLEET_UNAVAILABLE');
+});

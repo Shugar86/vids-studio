@@ -20,7 +20,9 @@ const DRAG_STEP_INTERVAL_MS = 20;
 
 // No arbitrary page evaluation, browser-wide target discovery or public CDP endpoint.
 // Injected Chrome APIs permit testing the exact same driver through a CDP fixture.
-export function createDriver(chromeApi) {
+export function createDriver(chromeApi, options = {}) {
+  const fleet = options.fleet;
+  let pairingTicket = fleet?.pairingTicket;
   let session = null;
   let lastError = null;
   let attaching = false;
@@ -35,6 +37,7 @@ export function createDriver(chromeApi) {
       attached: Boolean(session), sessionId: session?.id ?? null,
       tabId: session?.tabId ?? null, documentId: session?.documentId ?? null,
       url: session?.url ?? null, title: session?.title ?? null,
+      ...(fleet ? {browserInstanceId: fleet.browserInstanceId} : {}),
       capabilities: [...CAPABILITIES], lastError,
       runtime: {extension: {version: PROFILE.version, buildId: PROFILE.buildId,
         profileId: PROFILE.id, protocol: PROFILE.extensionProtocol}},
@@ -52,9 +55,10 @@ export function createDriver(chromeApi) {
     };
   }
 
-  async function badge(text) {
-    await chromeApi.action.setBadgeText({text}).catch(() => {});
-    if (text) await chromeApi.action.setBadgeBackgroundColor({color: PROFILE.badgeColor}).catch(() => {});
+  async function badge(text, tabId = session?.tabId) {
+    const scope = fleet && Number.isInteger(tabId) ? {tabId} : {};
+    await chromeApi.action.setBadgeText({text, ...scope}).catch(() => {});
+    if (text) await chromeApi.action.setBadgeBackgroundColor({color: PROFILE.badgeColor, ...scope}).catch(() => {});
   }
 
   function invalidate(target) {
@@ -220,7 +224,8 @@ export function createDriver(chromeApi) {
         old.port?.postMessage({v: 2, type: "event", event: "detached", status: status(), fenceReceipts});
       } catch { /* A disconnected host receives durable receipts at the next explicit attach. */ }
       try { old.port?.disconnect(); } catch { /* Already disconnected. */ }
-      await badge("");
+      await badge("", old.tabId);
+      try { options.onDetached?.(status()); } catch { /* UI bookkeeping cannot alter fencing. */ }
       return status();
     })();
     return fencing;
@@ -243,7 +248,7 @@ export function createDriver(chromeApi) {
       await previous;
       if (generation !== attachGeneration) fail("NOT_ATTACHED", "Attachment was canceled.");
       requireStorage(chromeApi);
-      await recoverBinding(chromeApi, PROFILE.id);
+      await recoverBinding(chromeApi, PROFILE.id, fleet ? tab.id : undefined);
       if (generation !== attachGeneration) fail("NOT_ATTACHED", "Attachment was canceled.");
       await chromeApi.debugger.attach({tabId: tab.id}, "1.3");
       if (generation !== attachGeneration) {
@@ -270,10 +275,18 @@ export function createDriver(chromeApi) {
         fail("DOCUMENT_CHANGED", "Вкладка изменилась во время подключения. Подключите её снова.");
       }
       await rememberBinding(chromeApi, {profileId: PROFILE.id, sessionId: target.id,
-        documentId: target.documentId, tabId: target.tabId});
+        documentId: target.documentId, tabId: target.tabId,
+        ...(fleet ? {browserInstanceId: fleet.browserInstanceId} : {})});
       const port = chromeApi.runtime.connectNative(HOST_NAME);
       target.port = port;
       port.onMessage.addListener(message => {
+        if (message?.type === "event") {
+          if (message.v === 2 && message.event === "pairing_claimed" && message.sessionId === target.id && session === target) {
+            pairingTicket = null;
+            try { options.onPairingClaimed?.(target.id); } catch { /* Capability is already consumed. */ }
+          }
+          return;
+        }
         void handleRequest(message).then(response => {
           try { port.postMessage(response); } catch { /* Host disappearance revokes this session below. */ }
         });
@@ -286,7 +299,8 @@ export function createDriver(chromeApi) {
       });
       const fenceReceipts = await readFences(chromeApi);
       ensureCurrent(target);
-      port.postMessage({v: 2, type: "hello", status: status(), fenceReceipts});
+      port.postMessage({v: 2, type: "hello", status: status(), fenceReceipts,
+        ...(fleet ? {fleet: {browserInstanceId: fleet.browserInstanceId, pairingTicket}} : {})});
       await badge(PROFILE.badgeText);
       ensureCurrent(target);
       return status();
@@ -1156,5 +1170,6 @@ export function createDriver(chromeApi) {
     if (session?.tabId === tabId) void detach("Вкладка закрыта.", true);
   }
 
-  return {attach, detach, status, handleRequest, onDebuggerEvent, onDebuggerDetach, onTabUpdated, onTabRemoved};
+  return {attach, detach, status, handleRequest, onDebuggerEvent, onDebuggerDetach, onTabUpdated, onTabRemoved,
+    dispose: () => exports.dispose()};
 }

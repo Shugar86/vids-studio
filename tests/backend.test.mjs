@@ -165,7 +165,10 @@ test('official MCP stdio client discovers tools and receives offline status', as
   try {
     await client.connect(transport);
     const {tools} = await client.listTools();
-    assert.equal(tools.length, 19);
+    assert.equal(tools.length, 24);
+    for (const name of ['list_sessions', 'claim_attachment', 'binding_status', 'resume_binding', 'release_binding']) assert.ok(tools.some(tool => tool.name === `vids_${name}`));
+    const claim = tools.find(tool => tool.name === 'vids_claim_attachment');
+    for (const field of ['sessionId', 'expectedDocumentId', 'pairingTicket', 'bindingId', 'bindingToken', 'intentId']) assert.ok(claim.inputSchema.required.includes(field));
     for (const name of ['start', 'status', 'result', 'cancel']) assert.ok(tools.some(tool => tool.name === `vids_job_${name}`));
     assert.deepEqual(tools.find(tool => tool.name === 'vids_job_start').inputSchema.properties.kind.const, 'export_mp4');
     for (const name of ['status', 'result', 'cancel']) assert.ok(tools.find(tool => tool.name === `vids_job_${name}`).inputSchema.required.includes('jobToken'));

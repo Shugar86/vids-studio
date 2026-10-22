@@ -8,6 +8,7 @@ import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {listSessions} from './fleet-client.mjs';
 
 const executeFile = promisify(execFile);
 const WINDOWS = process.platform === 'win32';
@@ -71,9 +72,49 @@ export async function validateUpload(files) {
   }));
 }
 
+export const SESSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function sessionSocketPath(sessionId, base = socketPath()) {
+  if (typeof sessionId !== 'string' || !SESSION_UUID.test(sessionId)) throw Object.assign(new Error('Use an exact session UUID from vids_list_sessions.'), {code: 'SESSION_REQUIRED'});
+  return path.join(path.dirname(base), 'sessions', `${sessionId}.${WINDOWS ? 'json' : 'sock'}`);
+}
+
 export async function bridgeRequest(method, args = {}, options = {}) {
+  // Explicit endpoints are used by isolated transport tests and legacy tools.
+  // Otherwise every fleet action is routed by its immutable attachment ID.
+  if (options.socketPath) return transportRequest(method, args, options);
+  if (method === 'list_sessions') {
+    try { return {ok: true, result: await listSessions({fresh: true})}; }
+    catch (error) { return failure(error.code || 'FLEET_UNAVAILABLE', error.message); }
+  }
+  if (args.sessionId && SESSION_UUID.test(args.sessionId)) {
+    const endpoint = sessionSocketPath(args.sessionId);
+    try {
+      await lstat(endpoint);
+      return transportRequest(method, args, {...options, socketPath: endpoint});
+    } catch (error) {
+      if (!['ENOENT', 'ENOTDIR'].includes(error.code)) return failure('SOCKET_CHECK_FAILED', 'Could not inspect this session endpoint.');
+      try {
+        await lstat(path.dirname(endpoint));
+        return failure('NOT_CONNECTED', 'This attachment is disconnected. Reconnect only its intended document and obtain a fresh session; another tab was not selected.');
+      } catch (directoryError) {
+        if (!['ENOENT', 'ENOTDIR'].includes(directoryError.code)) return failure('SOCKET_CHECK_FAILED', 'Could not inspect the session directory.');
+      }
+    }
+  }
+  if (['status', 'diagnostics'].includes(method) && !args.sessionId) {
+    try {
+      const fleet = await listSessions();
+      if (fleet.sessions.length) return {ok: true, result: {...fleet, fleet: true, attached: false,
+        selectionRequired: true, nextStep: 'Choose the exact document authorized for this chat. Claim its pairing ticket, then pass its sessionId explicitly to every tool. No active tab is selected automatically.'}};
+    } catch (error) { return failure(error.code || 'FLEET_UNAVAILABLE', error.message); }
+  }
+  return transportRequest(method, args, options);
+}
+
+async function transportRequest(method, args = {}, options = {}) {
   const {sessionId, operation_id, controlToken, ...params} = args;
-  const mutating = MUTATIONS.has(method) || ['acquire_control', 'renew_control', 'release_control', 'reconcile_control'].includes(method);
+  const mutating = MUTATIONS.has(method) || ['acquire_control', 'renew_control', 'release_control', 'reconcile_control', 'claim_attachment', 'resume_binding', 'release_binding'].includes(method);
   const id = randomUUID();
   const request = {v: LOCAL_PROTOCOL, type: 'request', id, method, params, client: MCP_RUNTIME};
   if (sessionId !== undefined) request.sessionId = sessionId;
@@ -102,7 +143,8 @@ export async function bridgeRequest(method, args = {}, options = {}) {
     let authenticated = !WINDOWS;
     let done = false;
     let sent = false;
-    let buffer = Buffer.alloc(0);
+    let chunks = [];
+    let buffered = 0;
     const finish = response => {
       if (done) return;
       done = true;
@@ -117,10 +159,12 @@ export async function bridgeRequest(method, args = {}, options = {}) {
       else { sent = true; socket.write(data); }
     });
     socket.on('data', chunk => {
-      if (buffer.length + chunk.length > (authenticated ? MAX_RESPONSE : 4096)) return transportFailure('RESPONSE_TOO_LARGE', 'Bridge response exceeds 24 MiB');
-      buffer = Buffer.concat([buffer, chunk]);
+      if (buffered + chunk.length > (authenticated ? MAX_RESPONSE : 4096)) return transportFailure('RESPONSE_TOO_LARGE', 'Bridge response exceeds 24 MiB');
+      chunks.push(chunk);
+      buffered += chunk.length;
+      if (chunk.indexOf(10) < 0) return;
+      const buffer = Buffer.concat(chunks, buffered);
       const end = buffer.indexOf(10);
-      if (end < 0) return;
       try {
         const response = JSON.parse(buffer.subarray(0, end).toString('utf8'));
         if (!authenticated) {
@@ -129,7 +173,7 @@ export async function bridgeRequest(method, args = {}, options = {}) {
           if (!timingSafeEqual(Buffer.from(response.proof, 'hex'), Buffer.from(proof('server'), 'hex'))) return finish(failure('UNSAFE_SOCKET', 'Native host authentication failed; no browser request was sent'));
           data = `${JSON.stringify({...request, transportProof: proof('client')})}\n`;
           if (Buffer.byteLength(data) > 256 * 1024) return finish(failure('REQUEST_TOO_LARGE', 'Request exceeds the authenticated transport limit'));
-          authenticated = true; buffer = Buffer.alloc(0); sent = true; socket.write(data); return;
+          authenticated = true; chunks = []; buffered = 0; sent = true; socket.write(data); return;
         }
         // Old v1/v2 hosts reject v3 before forwarding any browser operation.
         // Their explicit INVALID_ARGUMENT reply requests an upgrade safely.

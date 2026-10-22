@@ -1,15 +1,16 @@
 {
   "name": "vids-studio-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "MIT",
   "private": true,
   "type": "module",
-  "description": "A local, Google Vids-only MCP bridge to an explicitly attached Chrome tab",
+  "description": "A local Google Vids MCP bridge with independent document bindings, adaptive load limits and a shared monitor",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "start": "node server/index.mjs",
+    "monitor": "node server/fleet-dashboard.mjs",
     "release:build": "python3 scripts/build_release.py --output dist",
     "test:backend": "python3 -m unittest discover -s tests -p 'backend_*.py' && node --test --test-concurrency=1 tests/backend.test.mjs",
     "test": "python3 -m unittest discover -s tests -p \"*.py\" && node --test --test-concurrency=1 tests/*.test.mjs extension/*.test.mjs"

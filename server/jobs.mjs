@@ -5,9 +5,9 @@ import {JobStore, jobError, tokenHash} from './jobs-store.mjs';
 import {verifyExport} from './jobs-media.mjs';
 
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
-const PUBLIC = ['schemaVersion', 'id', 'profileId', 'documentId', 'kind', 'intentId', 'intentFingerprint', 'state', 'stage', 'createdAt', 'updatedAt', 'operationIds', 'receipts', 'evidence', 'issue', 'cancelRequested', 'cancellation', 'result'];
+const PUBLIC = ['schemaVersion', 'id', 'profileId', 'documentId', 'kind', 'intentId', 'intentFingerprint', 'state', 'stage', 'createdAt', 'updatedAt', 'operationIds', 'receipts', 'evidence', 'issue', 'cancelRequested', 'cancellation', 'result', 'runner'];
 const LABELS = [/^File$/, /^Download d ►$/, /^MP4 video \(\.mp4\) d$/];
-function publicJob(job) { return Object.fromEntries(PUBLIC.filter(key => job[key] !== undefined).map(key => [key, job[key]])); }
+export function publicJob(job) { return Object.fromEntries(PUBLIC.filter(key => job[key] !== undefined).map(key => [key, job[key]])); }
 function requireValue(value, code, message) { if (!value) throw jobError(code, message); }
 function validId(value) { return typeof value === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(value); }
 
@@ -35,7 +35,7 @@ export class ExportJobs {
     const checkedAt = Date.parse(check?.checkedAt);
     requireValue(check?.confirmed === true && typeof check.source === 'string' && check.source.trim().length >= 8 && check.source.length <= 256 && Number.isFinite(checkedAt) && checkedAt <= this.now() + 5000 && this.now() - checkedAt <= 900000,
       'AUTO_DOWNLOAD_PRECONDITION', 'Before export, attest that automatic saving without Save As was checked in this profile within 15 minutes. No browser setting was changed.');
-    const status = (await this.call('status', {})).result;
+    const status = (await this.call('status', {sessionId: args.sessionId})).result;
     requireValue(status?.attached && status.sessionId === args.sessionId && status.documentId === args.documentId, 'DOCUMENT_CHANGED', 'The current attached document/session does not match the export request.');
     requireValue(status.control?.mode === 'write', 'CONTROL_RECONCILIATION_REQUIRED', 'Export requires a write lease, not a reconciliation lease.');
     requireValue(status.capabilities?.includes('export_trigger') && status.capabilities?.includes('export_download_status'), 'EXPORT_UNAVAILABLE', 'Reload the compatible extension with download observation before exporting.');
@@ -131,7 +131,18 @@ export class ExportJobs {
     requireValue(released, 'CONTROL_RELEASE_UNCONFIRMED', 'Control release was not confirmed; local verification has not started.');
     if (this.syncCancellation(job)) { job.state = 'cancelled'; job.stage = 'download_completed_after_cancel'; job.cancellation = 'further_steps_stopped_google_export_not_canceled'; this.save(job); return; }
     job.state = 'running'; job.stage = 'verifying_local_file'; this.save(job);
-    const result = await this.verify({source: download.filename, outputDirectory: this.store.resultsDirectory, jobId: job.id});
+    const admission = new AbortController();
+    let result;
+    try { result = await this.verify({source: download.filename, outputDirectory: this.store.resultsDirectory, jobId: job.id, signal: admission.signal,
+      onBudgetState: ({state}) => {
+        job.stage = state === 'waiting' ? 'waiting_for_local_capacity' : 'verifying_local_file';
+        this.save(job);
+        if (this.syncCancellation(job)) admission.abort();
+      }}); }
+    catch (error) {
+      if (error.code !== 'MEDIA_CHECK_CANCELED' || !this.syncCancellation(job)) throw error;
+      job.state = 'cancelled'; job.stage = 'local_verification_stopped'; job.cancellation = 'source_download_retained_google_export_not_canceled'; this.save(job); return;
+    }
     job.result = {...result, provenance: {profileId: job.profileId, documentId: job.documentId, sessionId: job.sessionId, downloadId: download.downloadId, guid: download.guid, operationIds: [...job.operationIds]}};
     job.evidence.push({kind: 'local_file_verified', sha256: result.sha256, at: new Date(this.now()).toISOString()});
     if (this.syncCancellation(job)) {
@@ -155,7 +166,7 @@ export class ExportJobs {
     requireValue(typeof auth?.controlToken === 'string' && auth.controlToken.length >= 32 && typeof auth.sessionId === 'string', 'INVALID_ARGUMENT', 'Recovery requires this task’s current native writer lease.');
     requireValue(tokenHash(auth.controlToken) !== job.leaseHash, 'FRESH_RECOVERY_LEASE_REQUIRED', 'Release or reconcile the previous native lease, then acquire a new writer token before recovery. Reusing the old token cannot fence a delayed old request.');
     requireValue(!this.active.has(job.id), 'JOB_STILL_RUNNING', 'This process still runs the job; use normal status or cancellation.');
-    const status = (await this.call('status', {})).result;
+    const status = (await this.call('status', {sessionId: auth.sessionId})).result;
     requireValue(status?.attached && status.documentId === job.documentId && status.sessionId === auth.sessionId && (!sameSession || auth.sessionId === job.sessionId), 'DOCUMENT_CHANGED', 'Recovery must target the exact original document and requested session.');
     requireValue(status.control?.mode === 'write', 'CONTROL_RECONCILIATION_REQUIRED', 'Complete native reconciliation first and supply this task’s current writer lease.');
     await this.call('renew_control', {sessionId: auth.sessionId, controlToken: auth.controlToken});
@@ -164,8 +175,10 @@ export class ExportJobs {
   async inspect(access, prior, request) {
     if (TERMINAL.has(prior.state)) return publicJob(prior);
     const auth = await this.recoveryAuth(prior, request, {sameSession: true});
-    const job = this.store.claimRecovery(access.jobId, access.jobToken, this.instance, tokenHash(auth.controlToken));
+    const job = this.store.claimRecovery(access.jobId, access.jobToken, this.instance, tokenHash(auth.controlToken), prior);
     const initialEvidence = job.evidence.length;
+    this.active.set(job.id, job);
+    try {
     try {
       const download = (await this.call('export_download_status', {...auth, jobId: job.id})).result;
       requireValue(download?.jobId === job.id && download.sessionId === job.sessionId && download.documentId === job.documentId, 'EXPORT_BINDING_CHANGED', 'Previous download evidence does not match this job.');
@@ -181,12 +194,13 @@ export class ExportJobs {
     // If no file was verified it is still released; no action is replayed.
     if (!job.evidence.slice(initialEvidence).some(item => item.kind === 'control_released')) await this.release(job, auth);
     return publicJob(job);
+    } finally { this.active.delete(job.id); }
   }
   async acknowledge(access, prior, request) {
     if (TERMINAL.has(prior.state)) return publicJob(prior);
     requireValue(typeof request.evidence === 'string' && request.evidence.trim().length >= 16 && request.evidence.length <= 1024, 'RECOVERY_EVIDENCE_REQUIRED', 'Record what was checked in the current document and existing downloads before abandoning this unresolved intent.');
     const auth = await this.recoveryAuth(prior, request);
-    const job = this.store.claimRecovery(access.jobId, access.jobToken, this.instance, tokenHash(auth.controlToken));
+    const job = this.store.claimRecovery(access.jobId, access.jobToken, this.instance, tokenHash(auth.controlToken), prior);
     job.evidence.push({kind: 'operator_acknowledged_unknown', evidence: request.evidence.trim(), documentId: job.documentId, sessionId: auth.sessionId, at: new Date(this.now()).toISOString()}); this.save(job);
     requireValue(await this.release(job, auth), 'CONTROL_RELEASE_UNCONFIRMED', 'The recovery lease was not released; the intent remains unresolved.');
     job.cancelRequested = true; job.state = 'cancelled'; job.stage = 'unresolved_intent_abandoned'; job.cancellation = 'intent_abandoned_external_export_outcome_still_unknown'; this.save(job);
@@ -196,9 +210,9 @@ export class ExportJobs {
   close() { this.store.close(); }
 }
 
-export function registerJobTools(server, {z, bridgeRequest, PROFILE, directory = join(stateHome(), 'vids-studio-jobs', PROFILE.id)}) {
+export function registerJobTools(server, {z, bridgeRequest, PROFILE, directory = join(stateHome(), 'vids-studio-jobs', PROFILE.id), createService = options => new ExportJobs(options)}) {
   let jobs;
-  const service = () => jobs ||= new ExportJobs({directory, bridgeRequest, profile: PROFILE});
+  const service = () => jobs ||= createService({directory, bridgeRequest, profile: PROFILE});
   const access = {jobId: z.string().uuid(), jobToken: z.string().min(32).max(128)};
   const definitions = {
     start: {jobId: z.string().uuid(), jobToken: z.string().min(32).max(128), kind: z.literal('export_mp4'), intentId: z.string().uuid(), documentId: z.string().min(8).max(128), sessionId: z.string().min(1).max(128), controlToken: z.string().min(32).max(128), automaticDownload: z.object({confirmed: z.literal(true), checkedAt: z.string().datetime(), source: z.string().min(8).max(256)}).strict()},

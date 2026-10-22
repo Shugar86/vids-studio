@@ -1,5 +1,7 @@
 # Operate the attached Vids interface
 
+For each attached video in the current profile, first [bind this task to its document](parallel-sessions.md). `vids_status` without sessionId returns a list and does not choose a tab; diagnostics and every action address the exact session.
+
 ## Connection, ownership and background work
 
 Use the user's selected document. Confirm its URL/document ID, title, edit mode
@@ -8,7 +10,8 @@ public sharing. Read current schemas and call `vids_diagnostics`/`vids_status`.
 Runtime compatibility must be ready: MCP, native host and extension need matching
 profile/version/build identity. A listed tool does not establish a connection.
 
-Acquire control for the exact session and this task's owner label. Pass its
+Acquire control with your claimed `bindingId`/`bindingToken`, exact `sessionId`,
+`expectedDocumentId` and this task's owner label. Pass its
 `controlToken` to observation and actions; never borrow or share another task's
 token. `CONTROL_BUSY` means continue independent preparation, not force takeover.
 Release control when finished. Owner actions refresh activity; use renew during

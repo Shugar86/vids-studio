@@ -2,6 +2,34 @@
 // starts a download, changes browser settings, or searches download history.
 const TTL = 15 * 60 * 1000;
 const LIMIT = 32;
+// One pair of browser-wide listeners, regardless of attached document count.
+// Each subscriber retains its own strict document/frame/download correlation.
+const downloadHubs = new WeakMap();
+
+function subscribeDownloads(downloads, subscriber) {
+  if (!downloads) return () => {};
+  let hub = downloadHubs.get(downloads);
+  if (!hub) {
+    const subscribers = new Set();
+    const created = item => { for (const watcher of subscribers) watcher.onCreated(item); };
+    const changed = delta => { for (const watcher of subscribers) watcher.onChanged(delta); };
+    hub = {subscribers, created, changed};
+    downloadHubs.set(downloads, hub);
+    downloads.onCreated?.addListener(created);
+    downloads.onChanged?.addListener(changed);
+  }
+  hub.subscribers.add(subscriber);
+  let subscribed = true;
+  return () => {
+    if (!subscribed) return;
+    subscribed = false;
+    hub.subscribers.delete(subscriber);
+    if (hub.subscribers.size) return;
+    downloads.onCreated?.removeListener?.(hub.created);
+    downloads.onChanged?.removeListener?.(hub.changed);
+    if (downloadHubs.get(downloads) === hub) downloadHubs.delete(downloads);
+  };
+}
 
 function fault(code, message) { const error = new Error(message); error.code = code; throw error; }
 function validId(value) { return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value); }
@@ -132,7 +160,7 @@ export function createExportWatcher(chromeApi, {now = Date.now} = {}) {
     const job = jobs.get(jobId);
     if (job) job.triggerOutcome = 'unknown';
   }
-  chromeApi.downloads?.onCreated?.addListener(onCreated);
-  chromeApi.downloads?.onChanged?.addListener(onChanged);
-  return {arm, onDebuggerEvent, status, revoke, discard, markTriggerAccepted, markTriggerUnknown};
+  const unsubscribe = subscribeDownloads(chromeApi.downloads, {onCreated, onChanged});
+  function dispose() { unsubscribe(); jobs.clear(); candidates.clear(); }
+  return {arm, onDebuggerEvent, status, revoke, discard, markTriggerAccepted, markTriggerUnknown, dispose};
 }

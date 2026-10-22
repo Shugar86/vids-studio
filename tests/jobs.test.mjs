@@ -10,12 +10,17 @@ import {ExportJobs} from '../server/jobs.mjs';
 import {verifyExport} from '../server/jobs-media.mjs';
 import {JobStore} from '../server/jobs-store.mjs';
 let temporary, source;
+const priorMediaEnvironment = Object.fromEntries(['VIDS_STUDIO_MEDIA_BUDGET_DIR','VIDS_STUDIO_FLEET_DIR','VIDS_STUDIO_PYTHON'].map(key=>[key,process.env[key]]));
 before(async () => {
   temporary = await mkdtemp(join(tmpdir(), 'vids-jobs-test-')); source = join(temporary, 'source.mp4');
+  process.env.VIDS_STUDIO_MEDIA_BUDGET_DIR = join(temporary,'media-budget');
+  process.env.VIDS_STUDIO_FLEET_DIR = join(temporary,'fleet');
+  const python = spawnSync(process.env.VIDS_STUDIO_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'), ['-c','import sys; print(sys.executable)'], {encoding:'utf8'});
+  assert.equal(python.status,0); process.env.VIDS_STUDIO_PYTHON = python.stdout.trim();
   const render = spawnSync('ffmpeg', ['-nostdin','-v','error','-f','lavfi','-i','color=c=blue:s=64x48:r=5:d=0.4','-an','-threads','1','-c:v','libx264','-pix_fmt','yuv420p',source]);
   assert.equal(render.status,0,render.stderr?.toString());
 });
-after(async () => { await rm(temporary,{recursive:true,force:true}); });
+after(async () => { for(const [key,value] of Object.entries(priorMediaEnvironment)) { if(value===undefined)delete process.env[key];else process.env[key]=value; } await rm(temporary,{recursive:true,force:true}); });
 const token='x'.repeat(43);
 async function fixture(t, overrides={}) {
   const directory=await mkdtemp(join(temporary,'store-')); let now=Date.now(); let menu=0;let snapshot=0;let lastSnapshot;const calls=[];
@@ -154,6 +159,53 @@ test('recovery fencing stops a stale runner before its next browser mutation',as
   const other=new ExportJobs({directory:f.directory,bridgeRequest:f.jobs.bridge,profile:{id:'codex'}});t.after(()=>other.close());
   const ack=await other.cancel({jobId:job.id,jobToken:job.jobToken,acknowledgeUnknown:{sessionId:f.args.sessionId,controlToken:'r'.repeat(43),evidence:'Inspected current writer document; stop the unresolved old intent.'}});assert.equal(ack.state,'cancelled');resume();await f.jobs.drain();
   assert.equal(other.status({jobId:job.id,jobToken:job.jobToken}).state,'cancelled');assert.equal(f.calls.filter(c=>['click','export_trigger'].includes(c.method)).length,0);
+});
+for (const mode of ['inspect', 'acknowledge']) test(`parallel ${mode} recoveries cannot replace the winner after both validated the same fresh native lease`, async t => {
+  const f = await recoveryFixture(t);
+  let renewed = 0, allowRenew, enteredStep, allowStep, verificationCalls = 0;
+  const renewGate = new Promise(resolve => { allowRenew = resolve; });
+  const stepEntered = new Promise(resolve => { enteredStep = resolve; });
+  const stepGate = new Promise(resolve => { allowStep = resolve; });
+  const steps = [];
+  const bridge = async (method, args) => {
+    if (method === 'renew_control') {
+      if (++renewed === 2) allowRenew();
+      await renewGate;
+      return {ok: true, result: {}};
+    }
+    if (method === 'export_download_status' || method === 'release_control') {
+      steps.push(method);
+      if (method === (mode === 'inspect' ? 'export_download_status' : 'release_control')) {
+        enteredStep();
+        await stepGate;
+      }
+    }
+    return f.jobs.bridge(method, args);
+  };
+  const services = [0, 1].map(() => new ExportJobs({directory: f.directory, bridgeRequest: bridge, profile: {id: 'codex'},
+    verify: async () => { verificationCalls++; return {sha256: 'a'.repeat(64)}; }}));
+  t.after(() => services.forEach(service => service.close()));
+  const requests = services.map(service => (mode === 'inspect'
+    ? service.status({...f.access, inspectDownload: f.auth})
+    : service.cancel({...f.access, acknowledgeUnknown: {...f.auth, evidence: 'Inspected this document and its previous export; abandon only the old intent.'}}))
+    .then(value => ({value}), error => ({error})));
+  try {
+    await stepEntered;
+    // The winner is deliberately suspended after its claim. The loser must
+    // reject before it can observe a download or release the shared token.
+    const loser = await Promise.race(requests);
+    assert.equal(loser.error?.code, 'JOB_RECOVERY_CONFLICT');
+    assert.equal(steps.length, 1);
+  } finally { allowStep(); }
+  const outcomes = await Promise.all(requests);
+  assert.equal(outcomes.filter(outcome => outcome.error?.code === 'JOB_RECOVERY_CONFLICT').length, 1);
+  const winner = outcomes.find(outcome => outcome.value)?.value;
+  assert.equal(winner?.state, mode === 'inspect' ? 'succeeded' : 'cancelled');
+  assert.equal(winner.receipts.at(-1).outcome, 'unknown');
+  assert.equal(f.jobs.store.get(f.access.jobId).runnerEpoch, 1);
+  assert.equal(steps.filter(method => method === 'release_control').length, 1);
+  assert.equal(verificationCalls, mode === 'inspect' ? 1 : 0);
+  assert.equal(f.calls.filter(call => call.method === 'export_trigger').length, 1);
 });
 test('job metadata registration does not touch a configured unsafe store',async()=>{
   const {registerJobTools}=await import('../server/jobs.mjs');const {z}=await import('zod');const tools=new Map();

@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from coordinator import Coordinator, CoordinationError
 from platform_support import WINDOWS, ensure_private_directory, assert_private_file, secure_open
+from fleet import FleetRegistry, identifier as fleet_identifier
 
 PROFILE = json.loads((Path(__file__).resolve().parents[1] / "profile.json").read_text(encoding="utf-8"))
 HOST_RUNTIME = {"profileId": PROFILE["id"], "version": PROFILE["version"], "buildId": PROFILE["buildId"], "protocol": PROFILE["protocol"]}
@@ -36,7 +37,8 @@ CONTROL_TTL = 900.0
 MAX_PENDING = 128
 MUTATIONS = frozenset(("click", "drag", "scroll", "type_text", "press_key", "upload", "upload_via_picker", "export_trigger"))
 CONTROL_METHODS = frozenset(("acquire_control", "renew_control", "release_control", "reconcile_control"))
-METHODS = MUTATIONS | CONTROL_METHODS | {"status", "diagnostics", "observe", "screenshot", "export_download_status"}
+FLEET_METHODS = frozenset(("claim_attachment", "binding_status", "resume_binding", "release_binding"))
+METHODS = MUTATIONS | CONTROL_METHODS | FLEET_METHODS | {"status", "diagnostics", "observe", "screenshot", "export_download_status"}
 
 
 DIAG_LIMIT = 64 * 1024
@@ -182,6 +184,7 @@ class Pending:
     binding_generation: int = 0
     sent: bool = False
     deferred_scroll: bool = False
+    fleet_permit: bool = False
     created: float = field(default_factory=time.monotonic)
     done: threading.Event = field(default_factory=threading.Event)
     response: dict | None = None
@@ -219,6 +222,31 @@ class Bridge:
         self.workers = threading.BoundedSemaphore(32)
         self.diagnostics = None
         self.transport_secret = None
+        self.fleet = None
+        self.fleet_session = None
+        self.fleet_instance = None
+        self.last_browser_status = {}
+
+    def enable_fleet(self, hello, registry=None):
+        """Called once after validating the initial hello, before accepting callers."""
+        fleet = hello.get("fleet")
+        if not isinstance(fleet, dict) or not self.session_id or not self._extension_compatible():
+            raise ValueError("Fleet initialization requires a compatible attached hello")
+        self.fleet = registry or FleetRegistry()
+        self.fleet_session = self.session_id
+        self.fleet_instance = self.fleet.register(self.session_id, PROFILE["id"], self.document_id,
+            fleet.get("browserInstanceId"), self.path, fleet.get("pairingTicket"), {"host": HOST_RUNTIME, "extension": self.extension_runtime})
+        self.workers = threading.BoundedSemaphore(4)
+        self.diagnostics = DiagnosticLog(self.path.with_suffix(".log"))
+        self.fleet.record_fences(PROFILE["id"], hello.get("fenceReceipts"))
+        self.fleet.heartbeat(self.fleet_session, self.fleet_instance)
+
+    def heartbeat(self):
+        while not self.stopped.wait(3):
+            try:
+                self.fleet.heartbeat(self.fleet_session, self.fleet_instance)
+            except (CoordinationError, sqlite3.Error, OSError):
+                self.coordinator_error = "FLEET_UNAVAILABLE"
 
     def bind(self):
         if WINDOWS:
@@ -250,7 +278,7 @@ class Bridge:
             listener.listen(16)
             listener.settimeout(0.25)
             self.listener = listener
-            self.diagnostics = DiagnosticLog(parent / "bridge.log")
+            self.diagnostics = DiagnosticLog(self.path.with_suffix(".log") if parent.name == "sessions" else parent / "bridge.log")
             self.diag("start")
         except BaseException:
             listener.close()
@@ -281,7 +309,7 @@ class Bridge:
             os.close(fd)
             fd = None
             self.listener = listener
-            self.diagnostics = DiagnosticLog(self.path.parent / "bridge.log")
+            self.diagnostics = DiagnosticLog(self.path.with_suffix(".log") if self.path.parent.name == "sessions" else self.path.parent / "bridge.log")
             self.diag("start")
         except BaseException:
             if fd is not None:
@@ -391,6 +419,9 @@ class Bridge:
                   "control": control, "bridgeProtocol": LOCAL_PROTOCOL,
                   "runtime": {"host": HOST_RUNTIME, "extension": self.extension_runtime},
                   "coordinator": coordination, "coordinatorError": self.coordinator_error}
+        if self.fleet:
+            result.update({"fleet": True, "recovery": self.last_browser_status.get("recovery"),
+                           "capabilities": self.last_browser_status.get("capabilities", [])})
         if not self._extension_compatible():
             result["nextStep"] = "Reload this profile's extension during an owner-confirmed pause, explicitly attach the intended document, then use fresh session/control/snapshot IDs"
         return result
@@ -424,8 +455,26 @@ class Bridge:
                 return error("NOT_CONNECTED", "Native bridge has disconnected")
             if method == "diagnostics":
                 return {"ok": True, "result": self._metadata()}
+            if self.fleet and method == "status":
+                return {"ok": True, "result": self._metadata()}
             now = time.monotonic()
             self._expire_control(now)
+            if method in FLEET_METHODS:
+                if not self.fleet or session != self.session_id:
+                    return error("SESSION_MISMATCH", "Select this exact fleet attachment")
+                if method == "claim_attachment":
+                    result = self.fleet.claim(session, params)
+                    self.stdout.write(encode_native({"v": EXTENSION_PROTOCOL, "type": "event", "event": "pairing_claimed", "sessionId": session}))
+                    self.stdout.flush()
+                elif method == "resume_binding":
+                    result = self.fleet.resume(session, params)
+                elif method == "release_binding":
+                    if self.control or self.pending:
+                        return error("CONTROL_IN_FLIGHT", "Release the writer lease and settle pending work before releasing the task binding")
+                    result = self.fleet.release(session, params)
+                else:
+                    result = self.fleet.authorize(session, params)
+                return {"ok": True, "result": result}
             if method in CONTROL_METHODS:
                 return self._control_request(method, session, token, params, now)
             if method != "status":
@@ -448,13 +497,21 @@ class Bridge:
                 if mutating and len(self.receipts) >= CACHE_LIMIT:
                     return error("RECEIPT_CACHE_FULL", "Receipt cache is full; wait for expiry without reusing operation IDs")
                 lease = self.control.coordinator_lease if method != "status" else None
-                if mutating:
-                    # Commit durable intent before any bytes can reach Chrome.
-                    self.coordinator.begin(lease, op, fingerprint)
+                if self.fleet:
+                    self.fleet.admit(session, rid, method)
+                try:
+                    if mutating:
+                        # Commit durable intent before any bytes can reach Chrome.
+                        self.coordinator.begin(lease, op, fingerprint)
+                except BaseException:
+                    if self.fleet:
+                        self.fleet.settle(session, rid)
+                    raise
                 pending = Pending(rid, fingerprint, mutating, method=method, session_id=session,
                                   control_token=token if method != "status" else None,
                                   operation_id=op if mutating else None, coordinator_lease=lease,
                                   binding_generation=self.binding_generation)
+                pending.fleet_permit = self.fleet is not None
                 self.pending[rid] = pending
                 if pending.control_token:
                     self.control.inflight += 1
@@ -533,6 +590,10 @@ class Bridge:
         if session != self.session_id or self.session_id is None:
             return error("SESSION_MISMATCH", "Use the current attached sessionId from vids_status")
         if method == "acquire_control":
+            if self.fleet:
+                if params.get("expectedDocumentId") != self.document_id:
+                    return error("DOCUMENT_CHANGED", "Writer acquisition must name the exact assigned document")
+                self.fleet.authorize(session, params)
             label = params.get("ownerLabel")
             if not isinstance(label, str) or not 1 <= len(label.strip()) <= 120:
                 raise ValueError("ownerLabel must be 1..120 nonblank characters")
@@ -572,6 +633,10 @@ class Bridge:
                 response = error("COORDINATOR_UNAVAILABLE", "Durable arbitration could not record the operation outcome; inspect diagnostics before further mutations", unknown=pending.sent)
                 settled = False
         if settled:
+            if pending.fleet_permit:
+                recovery = self.fleet.settle(pending.session_id, rid, method=pending.method,
+                    code=(response.get("error") or {}).get("code"), sent=pending.sent)
+                self._fleet_recovery_status(recovery)
             self.pending.pop(rid, None)
             if self.control and pending.control_token == self.control.token:
                 self.control.inflight -= 1
@@ -594,16 +659,26 @@ class Bridge:
         document = status.get("documentId") if status["attached"] else None
         if status["attached"] and (not isinstance(document, str) or not 1 <= len(document) <= 256):
             return False
+        if self.fleet and session is not None and session != self.fleet_session:
+            # A fleet endpoint is immutable. Never repoint an old pathname at a
+            # new attachment, even if an unexpected native message asks us to.
+            self.close()
+            return False
         with self.lock:
             if expected_generation is not None and expected_generation != self.binding_generation:
                 return False
             self.extension_runtime = runtime if isinstance(runtime, dict) else None
             if not self._extension_compatible():
                 return False
+            self.last_browser_status = status
             if session is not None and session == self.session_id and document != self.document_id:
                 return False
             try:
                 self.coordinator.record_fences(PROFILE["id"], fence_receipts or [])
+                if self.fleet:
+                    self.fleet.record_fences(PROFILE["id"], fence_receipts or [])
+                    if session is None:
+                        self.fleet.detached(self.fleet_session, self.fleet_instance)
             except (CoordinationError, sqlite3.Error, OSError):
                 self.coordinator_error = "COORDINATOR_UNAVAILABLE"
             if session != self.session_id:
@@ -621,11 +696,28 @@ class Bridge:
                 self.binding_generation += 1
         return True
 
+    def _fleet_recovery_status(self, recovery):
+        if not recovery:
+            self.last_browser_status["recovery"] = None
+            return
+        phase = recovery["phase"]
+        self.last_browser_status["recovery"] = {
+            "state": "screenshot_cleanup_failed" if phase == "read_cleanup_failed" else
+                "screenshot_read_pending" if phase.startswith("read_") else "input_ack_pending",
+            "method": recovery["method"], "blocks": recovery.get("blocks", []),
+            "requiresFreshObservation": True,
+            **({"requiresReconciliation": True} if "mutations" in recovery.get("blocks", []) else {}),
+        }
+
     def receive(self, message):
         if message.get("v") != EXTENSION_PROTOCOL:
             return
         if message.get("type") == "diagnostic":
             self.diag("cdp", phase=message.get("phase"), method=message.get("method"), elapsedMs=message.get("elapsedMs"))
+            if self.fleet and message.get("phase") in DIAG_PHASES:
+                with self.lock:
+                    recovery = self.fleet.diagnostic(self.fleet_session, message.get("phase"), message.get("method"))
+                    self._fleet_recovery_status(recovery)
             return
         if message.get("type") in ("hello", "event"):
             status = message.get("status")
@@ -680,6 +772,11 @@ class Bridge:
 
     def close(self):
         self.stopped.set()
+        if self.fleet:
+            try:
+                self.fleet.detached(self.fleet_session, self.fleet_instance)
+            except (CoordinationError, sqlite3.Error, OSError):
+                pass
         if self.listener:
             self.listener.close()
         with self.lock:
@@ -701,7 +798,7 @@ class Bridge:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--socket", type=Path, default=default_socket_path())
+    parser.add_argument("--socket", type=Path)
     parser.add_argument("--registry", type=Path, default=default_registry_path())
     parser.add_argument("--parent-window", default=None)  # Chrome supplies this on Windows.
     parser.add_argument("chrome_origin", nargs="?")  # Chrome appends its extension origin.
@@ -710,7 +807,7 @@ def main():
         import msvcrt
         msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
         msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
-    bridge = Bridge(args.socket, registry_path=args.registry)
+    bridge = Bridge(args.socket or default_socket_path(), registry_path=args.registry)
     exit_reason = "host_error"
 
     def stop(*_):
@@ -720,15 +817,29 @@ def main():
         sys.exit(0)
 
     try:
-        bridge.bind()
         signal.signal(signal.SIGTERM, stop)
+        first = None
+        if args.socket is None:
+            first = read_native(sys.stdin.buffer)
+            if first.get("v") != EXTENSION_PROTOCOL or first.get("type") != "hello":
+                raise ValueError("The first native message must be a compatible hello")
+            if isinstance(first.get("fleet"), dict):
+                session = fleet_identifier((first.get("status") or {}).get("sessionId"))
+                bridge.path = bridge.path.parent / "sessions" / (session + (".json" if WINDOWS else ".sock"))
+                ensure_private_directory(bridge.path.parent)
+        bridge.bind()
+        if first is not None:
+            bridge.receive(first)
+            if isinstance(first.get("fleet"), dict):
+                bridge.enable_fleet(first)
+                threading.Thread(target=bridge.heartbeat, daemon=True).start()
         threading.Thread(target=bridge.serve, daemon=True).start()
         while True:
             bridge.receive(read_native(sys.stdin.buffer))
     except EOFError:
         exit_reason = "stdin_eof"
         return 0
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, CoordinationError, sqlite3.Error) as exc:
         print(f"vids-studio bridge: {exc}", file=sys.stderr)
         return 1
     finally:

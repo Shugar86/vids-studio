@@ -1,5 +1,27 @@
 # Changelog · История изменений
 
+## 0.4.0 — parallel preview / параллельная работа
+
+### English
+
+- Independent attachments, native endpoints and driver queues; an exact document binding belongs to one chat across Codex and Claude. One-time pairing and fenced resume replace implicit current-tab selection.
+- Shared adaptive operation limits, retained capacity for unsettled work and a separate bounded queue for local MP4 verification.
+- Local RU/EN monitor for both profiles: current operations, resource allowance, pause controls, recovery and actual export stages. No screenshot polling or invented completion percentages.
+- Separate export runners continue after an MCP client exits; missing heartbeat does not replay an export.
+- Ten-tab Chrome and ten-client MCP/native integration coverage. An opt-in Codex model acceptance script uses isolated fixture pages and existing account authorization.
+
+This is a preview. Fixture acceptance does not establish live Google Vids behavior, generation quota or video quality. Updating files does not reload an installed client.
+
+### Русский
+
+- Независимые подключения, native endpoints и очереди driver; точный документ закреплён за одним чатом между Codex и Claude. Одноразовый pairing и восстановление после подтверждённого отключения заменяют неявный выбор текущей вкладки.
+- Общий адаптивный допуск команд, сохранение занятых слотов при неизвестном исходе и отдельная очередь локальной проверки MP4.
+- Локальная панель RU/EN для обоих профилей: текущие операции, доступная нагрузка, паузы, восстановление и реальные этапы экспорта. Без опроса снимками и выдуманных процентов готовности.
+- Отдельные export runners продолжают работу после выхода MCP; отсутствие heartbeat не запускает повторный экспорт.
+- Интеграционные проверки десяти Chrome-вкладок и десяти MCP/native-клиентов. Добровольный прогон настоящих Codex-моделей использует изолированные страницы и существующую авторизацию аккаунта.
+
+Предварительная версия. Фикстуры не доказывают поведение живого Google Vids, квоту генерации и качество видео. Замена файлов не перезагружает установленный клиент.
+
 ## 0.3.0 — Windows and macOS preview / Windows и macOS
 
 ### English

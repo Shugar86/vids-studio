@@ -139,7 +139,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ffprobe -version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Verify committed profile and real native platform integration
+      - name: Verify native fleet endpoints, ownership and local media admission
         run: |
           python scripts/build_profiles.py --profile codex --target . --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

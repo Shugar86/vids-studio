@@ -147,7 +147,9 @@ def main():
     temporary_parent = Path.home().resolve()
     with private_temporary_directory(temporary_parent) as base:
         env = {**os.environ, 'PYTHONUTF8': '1', 'VIDS_STUDIO_PYTHON': sys.executable,
-               'VIDS_PLATFORM_SMOKE_DIR': str(base), 'XDG_STATE_HOME': str(base / 'mcp-state')}
+               'VIDS_PLATFORM_SMOKE_DIR': str(base), 'XDG_STATE_HOME': str(base / 'mcp-state'),
+               'VIDS_STUDIO_FLEET_DIR': str(base / 'fleet'),
+               'VIDS_STUDIO_MEDIA_BUDGET_DIR': str(base / 'media-budget')}
         verify_private_files(base)
         setup = module('vids_platform_setup', ROOT / 'scripts/setup.py')
         backups, configurations, launchers, profile_targets, profile_environments = [], {}, {}, {}, {}
