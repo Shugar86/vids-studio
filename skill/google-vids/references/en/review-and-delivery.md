@@ -74,6 +74,21 @@ and any soft subtitle track separately. `mov_text` presence does not establish
 burned captions, rendering in every player or accurate words. Editor CC settings
 do not prove the final export.
 
+Also check these delivery conditions:
+
+- The file belongs to the intended document. Shared download folders may contain
+  another agent's export; an observed wait selected the wrong film. Filename and
+  modification time are clues, not attribution evidence. Compare actual content
+  with the intended document and edit. A successful typed export requires the
+  job's own evidence and its supported correlation with the browser download;
+  independent file verification does not replace that status.
+- Compare frame-level shot changes with the edit plan. Inspect scene ends for
+  white/black frames: a scene longer than its clip may show white behind overlays.
+  At each cut, inspect the caption band frame by frame from the old phrase's end
+  through stable appearance of the next, looking for repetition or remnants.
+- After changing only caption text, verify that audio stayed unchanged by
+  comparing the previous and new export's decoded PCM.
+
 Local helpers use installed ffmpeg/ffprobe, do not install them and preserve the
 source. Run from the skill directory with new output paths:
 

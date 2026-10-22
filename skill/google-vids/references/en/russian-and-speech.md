@@ -85,3 +85,32 @@ layers. Extracted `mov_text` can differ from visible burned text; check both,
 including cuts. Transcript edits do not prove a newly exported file and do not
 change spoken audio. Locate the defect in sound, subtitle data or picture before
 fixing the corresponding layer. UI guidance is in [operate-vids](operate-vids.md).
+
+**Cuts and styled-caption rows.** In one observed export, a word whose interval
+crossed a scene boundary appeared as a remnant on the next scene. This does not
+establish Vids' general algorithm: another reviewed edit held the same words
+continuously across cuts without reappearance. First distinguish reappearance,
+continuous hold and one-word remnants in the actual version's frames. Moving a
+cut to the next word's start, sometimes with an extra frame, helped in specific
+trials; it is an option when it preserves action and speech, not a universal fix.
+If the cut is correct and only the caption is wrong, use the
+[local caption trim](timing-and-caption-qa.md#a-verified-local-caption-trim).
+Whisper timings differed from visible captions by up to one second in those
+trials; unchecked ASR is not a precise editing grid. Expand frame checks from the
+old phrase's end through a stable new caption. −3…+3 frames is a starting window,
+and a remnant can last longer.
+
+**Two caption sets in the player.** A player can display small `mov_text` captions
+over burned styled captions. In one reviewed export, the soft track also
+contained English phrases from automatic transcription of instrumental music.
+If the intended delivery needs only the burned set, make a separate copy without
+the soft track (`ffmpeg -i in.mp4 -map 0 -map -0:s -c copy out.mp4`), preserving
+the native export and avoiding re-encoding. Compare video/audio packet hashes
+before and after; retain a selectable-caption version if the user requested it.
+To correct confirmed unwanted words in the project, an observed route was:
+music track → Edit with transcript → select words with Shift+Arrow → Edit → empty
+text. Verify the current controls and exact selection. Decoded PCM matched
+between the two exports in that trial; check audio preservation for the new edit
+rather than treating this as a guarantee. Voice-script quotation marks may become
+straight `"…"` in captions; omit unnecessary quotation marks from spoken copy or
+correct the transcript.

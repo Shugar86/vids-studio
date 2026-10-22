@@ -84,6 +84,43 @@ plausible and within the authorized preparation scope; remove reversed audio and
 check both new boundaries. A silent on-screen character must also look silent:
 absence of an audio track does not rule out unintended lip articulation.
 
+### Person and object in one take
+
+When a scene depends on “the object acts → the person reacts,” stage both in one
+Animate take from a frame that contains both subjects. Separate object/reaction
+shots cannot demonstrate their joint presence. In one production trial, the brief
+required the lamp to turn while the character stayed in frame. The following
+techniques worked in a small set of trials; they are not model guarantees:
+
+- **Say who moves the object.** A generated take assigned the turn to the person's
+  hand. A useful correction was: “Both hands stay on the keyboard the whole time
+  and never come near the lamp; nobody touches the desk lamp, it moves by itself.”
+  Inspect the hands throughout the selected range.
+- **Write timed beats against speech.** For example, “For the first 2.5 seconds
+  they …; around 3 seconds the lamp …; around 3.5 seconds they …”: three or four
+  beats, each with one action. Beat time = target word start − scene start + take
+  source-in. Accepted trials landed within roughly ±0.3 seconds; this is observed
+  precision, not a promise. An extra 1–2 seconds of generated material can provide
+  room to select the entrance and exit.
+- **Name the final state and its visible consequence.** For example, “…and stays
+  turned away until the end; its warm light leaves him and his face is lit only
+  by the laptop.” Without a sustained endpoint, an earlier take produced a
+  one-frame flash and turned back. Simplify the sequence and clarify the result
+  instead of endlessly adding prohibitions. One retry per take can be a useful
+  budget; track generations when the observed panel provides no quota counter.
+- **Join the preceding shot.** Use its last frame as the Animate reference when
+  seeking a seamless cut. The model redraws the first generated frame, so inspect
+  the actual difference across the join.
+- **Preserve the resulting state.** If the lamp turned away, later shots should
+  not show it lighting the person again without a motivated return. A reaction
+  after a cutaway can come from the same take's tail rather than an older take
+  with the previous lighting.
+- **Silent character:** a naturally closed mouth, no generated speech, unwanted
+  text/logos, extra hands or object morphing.
+
+For the full causal sequence and acceptance checks, use
+[action and reaction](action-and-reaction.md).
+
 ## Choose the right avatar deliverable
 
 * **Static portrait/fictional character:** an image asset; movement and speech

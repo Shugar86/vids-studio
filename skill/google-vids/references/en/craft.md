@@ -89,6 +89,15 @@ action; do not leave an empty tail or enforce equal scene lengths. One continuou
 sentence can support several shots. A deliberate hold is not automatically a
 fault because a freeze detector reports little pixel change.
 
+Stage the action answered by a line within the shot: time its generated beat to
+the word and keep the character's reaction in the same take; see
+[person and object in one take](generation.md#person-and-object-in-one-take).
+With burned captions, consider a cut at the start of a word, preferably a phrase;
+verify the actual caption behavior using [caption checks](russian-and-speech.md#captions-and-time-domains).
+A detail cutaway can cover an inter-phrase pause. Splitting one continuous take
+into adjacent scenes with contiguous source ranges can preserve an invisible
+picture cut while aligning one action with two spoken accents.
+
 Treat voice, music and event sound as separate layers. Music can carry a phrase
 or transition; a small motivated SFX can make an event tangible. Do not add sound
 to every movement. Check whether scene changes have audible consequences when
@@ -96,3 +105,9 @@ the concept needs them. A music bed alone may leave all actions emotionally flat
 Listen to speech and music separately and in the final mix, including joins,
 loop seams, fades and the ending. Meter values help diagnose problems but do not
 establish musical character, intelligibility or a universal loudness target.
+
+After changing the ending's length, check the music endpoint: a shorter film may
+cut off its fade. Vids may transcribe voice and music separately; music can add
+unwanted caption words, while a voice track can acquire an extra final word.
+See [caption correction](russian-and-speech.md#captions-and-time-domains) and verify
+each affected layer.

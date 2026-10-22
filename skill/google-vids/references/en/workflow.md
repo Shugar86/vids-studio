@@ -25,6 +25,14 @@ different editor. An already authorized mixed workflow needs no repeated approva
   poor execution. If creative choice is delegated, explain the decision and act.
 * **Images, clips or avatars:** use [generation](generation.md). A portrait,
   talking script-avatar and personal avatar are different deliverables.
+* **A character and a moving object:** read [action and reaction](action-and-reaction.md)
+  before generation: joint framing, hands, object mechanics, reaction order,
+  pacing and take selection.
+* **Sound, captions and cuts after editing:** use [timing and caption QA](timing-and-caption-qa.md)
+  for SFX alignment, spoken/visible repetition, local caption trims, a second
+  subtitle track and frame-level rechecks. A single take's observations are not
+  a universal cut offset or fixed QA window.
+
 * **Diagnosis only:** remain read-only unless a fix is requested.
 
 ## Build the film

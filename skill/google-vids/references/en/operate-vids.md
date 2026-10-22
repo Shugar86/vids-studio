@@ -97,6 +97,35 @@ invented RPCs such as `add_scene`/`set_voice`.
 * Transitions can overlap scenes and change total timing. Verify downstream
   boundaries instead of adding a transition duration to the old scene total.
 
+### Exact duration through Replace video
+
+In one observed edit, Replace video set scene length to the maximum of the new
+clip length and the latest endpoint of another layer. Exported cut frames
+confirmed this across 14 replacements. Dragging the scene edge at 200% zoom was
+several frames off, and a one-frame adjustment did not apply. A clip prepared to
+the required duration can provide a more precise replacement; verify the result
+in the current UI and export.
+
+If an image layer extends beyond the new clip, the scene may remain longer and
+show a white tail with overlays. Extend the clip appropriately, for example with
+a deliberate final-frame hold, or shorten that layer first. Direct download from
+the AI Video panel was unavailable in that observed UI; inspect the current
+account's controls. If no direct route exists, an observed workaround was:
+Insert into a temporary final scene → export → extract the precise frame range
+→ Upload and Replace video in the working scene → remove temporary scenes.
+Use the normal export/upload guards and confirm the selected temporary scenes
+before deleting. One trial inserted a vertical take into a cropped 16:9 frame;
+verify full-picture framing before extracting it.
+
+### Confirm the selected scene
+
+In an observed edit after deletions and timeline scrolling, AX nodes named
+`Scene N of M` did not match thumbnail positions. Clicking one selected a neighbor,
+and an unintended deletion needed Undo. Select from a fresh screenshot and
+confirm the intended clip name on the selected scene's track. Timeline panel
+height can change with the selected scene's layer count; recalculate coordinates
+after each selection.
+
 ## File upload without a system picker
 
 If fresh observation exposes a file input, establish its purpose first: an
