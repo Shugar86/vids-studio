@@ -54,6 +54,12 @@ def extension_status(session="session-1"):
             "runtime": {"extension": {**bridge.HOST_RUNTIME, "protocol": bridge.EXTENSION_PROTOCOL}}}
 
 
+def scroll_timeout_response(settled, rid="req-1", session="session-1"):
+    return {"v": bridge.EXTENSION_PROTOCOL, "type": "response", "id": rid, "sessionId": session,
+            "ok": False, "settled": settled,
+            "error": {"code": "BROWSER_TIMEOUT", "message": "Wheel acknowledgement is delayed", "outcome": "unknown"}}
+
+
 def attached_host(path="/unused", stdout=None, timeout=0.5, controlled=True):
     temporary = tempfile.TemporaryDirectory()
     host = bridge.Bridge(path, stdout or CapturedOutput(), timeout=timeout,
@@ -436,6 +442,139 @@ class ControlTests(FixtureCase):
         self.assertTrue(next_owner["ok"])
         self.assertNotEqual(next_owner["result"]["controlToken"], TEST_TOKEN)
         self.assertEqual(host.request(request())["error"]["code"], "CONTROL_BUSY")
+
+    def test_scroll_timeout_keeps_control_and_blocks_mutations_until_late_settlement_and_reconciliation(self):
+        host = attached_host(timeout=1)
+        lease = host.control
+        results = []
+        thread = threading.Thread(target=lambda: results.append(host.request(request(method="scroll"))))
+        thread.start()
+        self.assertTrue(host.stdout.ready.wait(0.3))
+        host.receive(scroll_timeout_response(False))
+        thread.join(1)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(results[0]["error"]["code"], "BROWSER_TIMEOUT")
+        self.assertEqual(results[0]["error"]["outcome"], "unknown")
+        self.assertIs(host.control, lease)
+        self.assertEqual((host.session_id, lease.token, lease.inflight), ("session-1", TEST_TOKEN, 1))
+        self.assertEqual(host.coordinator.status("fixture")["unknownOperations"][0]["state"], "pending")
+        self.assertTrue(host.request(control_request("renew_control", TEST_TOKEN))["ok"])
+        for method in ("reconcile_control", "release_control"):
+            self.assertEqual(host.request(control_request(method, TEST_TOKEN))["error"]["code"], "CONTROL_IN_FLIGHT")
+        self.assertEqual(host.request(request(rid="next", op="next-operation"))["error"]["code"], "CONTROL_IN_FLIGHT")
+        replay = host.request(request(rid="retry", method="scroll"))
+        self.assertTrue(replay["receipt"]["replayed"])
+        self.assertEqual(replay["error"]["outcome"], "unknown")
+        self.assertEqual(len(host.stdout.messages), 1, "no second wheel or mutation reaches Chrome")
+
+        # Read-only inspection can proceed while the original wheel is pending.
+        host.stdout.ready.clear()
+        observed = []
+        reader = threading.Thread(target=lambda: observed.append(host.request(request(rid="read", method="observe"))))
+        reader.start()
+        self.assertTrue(host.stdout.ready.wait(0.3))
+        host.receive({"v": bridge.EXTENSION_PROTOCOL, "type": "response", "id": "read", "ok": True,
+                      "result": {"snapshotId": "new-observation"}})
+        reader.join(1)
+        self.assertFalse(reader.is_alive())
+        self.assertTrue(observed[0]["ok"])
+        self.assertEqual(lease.inflight, 1)
+
+        host.receive(scroll_timeout_response(True))
+        self.assertIs(host.control, lease)
+        self.assertEqual(lease.inflight, 0)
+        self.assertNotIn("req-1", host.pending)
+        state = host.coordinator.status("fixture")
+        self.assertEqual(state["state"], "reconcile")
+        operation = state["unknownOperations"][0]
+        self.assertEqual((operation["state"], operation["initial_outcome"], operation["latest_outcome"]),
+                         ("unknown", "unknown", "unknown"))
+        self.assertEqual(host.request(request(rid="after", op="after-operation"))["error"]["code"], "RECONCILIATION_REQUIRED")
+        reconcile = control_request("reconcile_control", TEST_TOKEN)
+        self.assertEqual(host.request(reconcile)["error"]["code"], "RECONCILIATION_EVIDENCE_REQUIRED")
+        reconcile["params"] = {"acknowledgeUnknown": True, "evidence": "Inspected the current timeline; retaining the uncertain prior scroll outcome"}
+        self.assertTrue(host.request(reconcile)["ok"])
+        self.assertEqual(lease.coordinator_lease.mode, "write")
+        replay = host.request(request(rid="retry-after", method="scroll"))
+        self.assertTrue(replay["receipt"]["replayed"])
+        self.assertEqual(replay["error"]["outcome"], "unknown")
+        self.assertEqual(len(host.stdout.messages), 2, "inspection is the only additional browser request")
+        self.assertTrue(host.request(control_request("release_control", TEST_TOKEN))["ok"])
+
+    def test_invalid_or_stale_scroll_settlements_cannot_release_quarantine(self):
+        host = attached_host(timeout=1)
+        result = []
+        thread = threading.Thread(target=lambda: result.append(host.request(request(method="scroll"))))
+        thread.start()
+        self.assertTrue(host.stdout.ready.wait(0.3))
+        host.receive(scroll_timeout_response(False))
+        thread.join(1)
+        self.assertFalse(thread.is_alive())
+        pending = host.pending["req-1"]
+        valid = scroll_timeout_response(True)
+        invalid = [
+            {**valid, "settled": "true"}, {**valid, "settled": 1}, {**valid, "settled": None},
+            {key: value for key, value in valid.items() if key != "settled"},
+            {**valid, "sessionId": "another-session"},
+            {key: value for key, value in valid.items() if key != "sessionId"},
+            {**valid, "ok": True, "result": {"performed": True}},
+            {**valid, "error": {**valid["error"], "code": "OTHER_ERROR"}},
+            {**valid, "error": {**valid["error"], "outcome": "not_performed"}},
+            {**valid, "error": None}, {**valid, "id": "another-request"},
+        ]
+        for message in invalid:
+            with self.subTest(message=message):
+                host.receive(message)
+                self.assertIs(host.pending["req-1"], pending)
+                self.assertEqual(host.control.inflight, 1)
+                self.assertEqual(host.coordinator.status("fixture")["unknownOperations"][0]["state"], "pending")
+        # A stale binding's late result cannot authorize the current generation.
+        host.binding_generation += 1
+        host.receive(valid)
+        self.assertIs(host.pending["req-1"], pending)
+        self.assertEqual(host.control.inflight, 1)
+        self.assertEqual(host.request(control_request("reconcile_control", TEST_TOKEN))["error"]["code"], "CONTROL_IN_FLIGHT")
+
+    def test_scroll_settlement_before_timeout_receipt_preserves_unknown_without_resurrecting_pending(self):
+        host = attached_host(timeout=1)
+        results = []
+        thread = threading.Thread(target=lambda: results.append(host.request(request(method="scroll"))))
+        thread.start()
+        self.assertTrue(host.stdout.ready.wait(0.3))
+        # Chrome can settle between the timer firing and the first receipt being posted.
+        host.receive(scroll_timeout_response(True))
+        thread.join(1)
+        self.assertFalse(thread.is_alive())
+        host.receive(scroll_timeout_response(False))
+        host.receive(scroll_timeout_response(True))
+        self.assertEqual(host.pending, {})
+        self.assertEqual(host.control.inflight, 0)
+        self.assertEqual(results[0]["error"]["outcome"], "unknown")
+        self.assertEqual(host.coordinator.status("fixture")["state"], "reconcile")
+        self.assertEqual(host.request(request(rid="retry", method="scroll"))["error"]["outcome"], "unknown")
+        self.assertEqual(len(host.stdout.messages), 1)
+
+    def test_explicit_scroll_settlement_cannot_complete_another_method_or_unsent_request(self):
+        for method in ("type_text", "observe", "scroll"):
+            with self.subTest(method=method):
+                host = attached_host(timeout=1)
+                results = []
+                thread = threading.Thread(target=lambda: results.append(host.request(request(method=method))))
+                thread.start()
+                self.assertTrue(host.stdout.ready.wait(0.3))
+                pending = host.pending["req-1"]
+                if method == "scroll":
+                    pending.sent = False
+                host.receive(scroll_timeout_response(True))
+                self.assertFalse(pending.done.is_set())
+                self.assertEqual(host.control.inflight, 1)
+                pending.sent = True
+                # Legacy responses retain their existing completion semantics.
+                host.receive({"v": bridge.EXTENSION_PROTOCOL, "type": "response", "id": "req-1", "ok": True, "result": {}})
+                thread.join(1)
+                self.assertFalse(thread.is_alive())
+                self.assertTrue(results[0]["ok"])
+                self.assertEqual(host.control.inflight, 0)
 
     def test_owner_renew_and_release_cannot_be_used_by_other_task(self):
         host = attached_host()

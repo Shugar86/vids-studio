@@ -12,7 +12,7 @@ Start with `vids_diagnostics` and `vids_status`. They do not attach tabs, take c
 | `RECONNECT_REQUIRED` | Finish active work, reload the extension card, reconnect the intended tab and refresh MCP. Compare MCP/host/extension profile/version/build fields. Rebuilding files alone is insufficient. |
 | `CONTROL_BUSY` | Another task owns this document. Let that task release its lease. Do not borrow its token, delete state, or use another profile to bypass ownership. |
 | `STALE_SNAPSHOT` or stale session | Get current status, establish your own valid control and obtain a fresh observation. Do not reuse coordinates or tokens from an earlier attachment. |
-| `BROWSER_RECOVERING` | An earlier screenshot read is still settling. Inspect status until `recovery: null`, then obtain a new observe. Do not send input while recovery is active. |
+| `BROWSER_RECOVERING` | Read `status.recovery.state`. `screenshot_read_pending` blocks another screenshot; `input_ack_pending` blocks mutations while an earlier scroll may still execute. AX/status remain available in these new modes. Obtain fresh evidence and follow the distinct recovery paths below. Older `waiting_for_read` blocks all browser operations. |
 | `BROWSER_TIMEOUT` after a mutation | The outcome may be unknown. Inspect the receipt and document; do not repeat the click/type/upload merely because the response timed out. |
 | `mode: reconcile` | Inspect the current document, then supply meaningful evidence to `vids_reconcile_control`. Keep the original unknown outcome recorded; this is not permission to replay it. |
 | Export job needs reconciliation | Check [jobs](jobs.md): unsupported UI labels, referrer, session or ambiguous download evidence stop safely. Do not switch to guessing the latest MP4. |
@@ -31,11 +31,23 @@ An extension **reload**, tab **reconnect** and MCP **refresh** solve different p
 
 For shared-document coordination, update **both** profiles. A still-running 0.1 host does not honor the 0.2 coordinator. Do not interrupt another task's active generation merely to refresh a file.
 
-## Screenshot recovery has a boundary
+## A screenshot timeout preserves the attachment
 
-For screenshot reads only, the driver can return `BROWSER_TIMEOUT` after ten seconds while retaining a barrier for the original read. It waits up to ten more seconds for that read to settle. Its late image is discarded; actions remain blocked and old snapshots are invalid. If the read never settles, the attachment is revoked.
+In the updated driver, a screenshot read that does not answer within ten seconds returns `BROWSER_TIMEOUT`. This timeout does not detach the tab or revoke the task's control. Status reports `recovery.state: screenshot_read_pending`, `blocks: ["screenshot"]` and `timeoutMs: 10000`. There is no second deadline that detaches the tab. Normal control expiry, document changes and real disconnects still apply.
 
-This handles a delayed read, not a permanently hung Chrome renderer. It does not automatically foreground Chrome, reconnect or replay input. Timeout behavior for a mutation remains conservative.
+Obtain a fresh `vids_observe`: the timeout invalidates the old snapshot, but AX observation and actions using a fresh snapshot remain available. A new screenshot returns `BROWSER_RECOVERING` without sending another capture while the original read is pending. Its late result is discarded and cannot replace a newer snapshot. After the read settles, `recovery` becomes `null` and a new screenshot may be requested.
+
+Chrome may fail to provide a frame when its window is hidden or occluded; a timeout alone does not prove that cause. The bridge does not foreground Chrome, use system input or promise that every background screenshot will succeed. Continue through AX only when it provides enough evidence for the intended action. If visual evidence is required, leave that action pending rather than guess from old pixels.
+
+**Older builds:** `waiting_for_read` means the previous recovery contract: all browser operations remain blocked for up to ten more seconds, after which an unsettled read detaches the tab. Wait for `recovery: null` and re-observe if the same session survives, or reconnect explicitly after a detach. A missing `recovery` field does not establish support for the new behavior; verify the loaded build, not just files on disk. Mutation timeouts still require reconciliation of their unknown outcome, never automatic replay.
+
+## A scroll timeout requires reconciliation
+
+The updated driver also preserves attachment when a scroll's `Input.dispatchMouseEvent` times out. This is a pending **mutation**, not a screenshot read: status reports `recovery.state: input_ack_pending`, `blocks: ["mutations"]` and `requiresReconciliation: true`. AX observation and status remain available, but all mutations, control release and reconciliation are blocked until that original Chrome command actually settles. A timeout does not prove the wheel was delivered or cancelled; it may execute later.
+
+After a late ACK or rejection, the original outcome remains `unknown`. Obtain a fresh `vids_observe`, establish what happened and use `vids_reconcile_control` with evidence before any new write. The end of `input_ack_pending` alone does not authorize another action, and a successful ACK alone does not prove the editor scrolled. Do not retry the old scroll or switch to another gesture to repeat the same intent.
+
+This contract applies only to a loaded build reporting `input_ack_pending`. Other mutation timeouts retain their existing fail-closed/reconnect handling. The bridge does not foreground Chrome or use system input to resolve a pending wheel event.
 
 ## Upload and input checks
 

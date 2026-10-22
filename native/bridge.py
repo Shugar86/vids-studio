@@ -181,6 +181,7 @@ class Pending:
     coordinator_lease: object | None = None
     binding_generation: int = 0
     sent: bool = False
+    deferred_scroll: bool = False
     created: float = field(default_factory=time.monotonic)
     done: threading.Event = field(default_factory=threading.Event)
     response: dict | None = None
@@ -633,6 +634,28 @@ class Bridge:
             self._session_status(status, message.get("fenceReceipts"))
             return
         if message.get("type") == "response" and isinstance(message.get("id"), str):
+            with self.lock:
+                pending = self.pending.get(message["id"])
+                if "settled" in message or (pending and pending.deferred_scroll):
+                    detail = message.get("error")
+                    # Only a sent wheel operation in this live binding can use
+                    # a two-stage timeout receipt. An incomplete/mismatched
+                    # receipt must never release an unsettled mutation.
+                    if not (pending and pending.sent and pending.mutating and pending.method == "scroll"
+                            and pending.session_id == self.session_id == message.get("sessionId")
+                            and pending.binding_generation == self.binding_generation
+                            and self.control and pending.control_token == self.control.token
+                            and pending.coordinator_lease is self.control.coordinator_lease
+                            and isinstance(message.get("settled"), bool) and message.get("ok") is False
+                            and isinstance(detail, dict) and detail.get("code") == "BROWSER_TIMEOUT"
+                            and detail.get("outcome") == "unknown" and isinstance(detail.get("message"), str)):
+                        return
+                    pending.deferred_scroll = True
+                    # The first receipt stays unknown. A later ACK only proves
+                    # settlement, moving durable state to unknown/reconcile;
+                    # it cannot turn the original receipt into success.
+                    self._complete_locked(message["id"], {"ok": False, "error": detail}, settled=message["settled"])
+                    return
             if message.get("ok") is True:
                 with self.lock:
                     pending = self.pending.get(message["id"])

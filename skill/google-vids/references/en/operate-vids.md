@@ -56,8 +56,52 @@ Do not repeat a mutation with either the same or a new operation ID to discover
 whether it ran. In-memory receipt caching has bounded retention and can disappear
 on restart; it is not durable exactly-once execution. A later response does not
 rewrite an original `unknown`. An error on a later screenshot does not establish
-the cause of the earlier disconnection. Limited read recovery never authorizes
+the cause of the earlier disconnection. Isolating a timed-out screenshot read never authorizes
 mutation replay.
+
+After `BROWSER_TIMEOUT` from `vids_screenshot`, inspect `vids_status`. The updated
+behavior is identified by `recovery.state: screenshot_read_pending`,
+`blocks: ["screenshot"]` and `timeoutMs: 10000`. The read times out after ten
+seconds without detaching the tab or revoking control; there is no second detach
+deadline. The old snapshot is invalid, so obtain a fresh `vids_observe` and use
+its evidence for supported actions. While the original read remains pending,
+another screenshot returns `BROWSER_RECOVERING` without sending another capture.
+Do not poll screenshot in a loop. The late result is discarded and cannot replace
+a newer snapshot. Once the read settles, `recovery` becomes `null` and another
+screenshot can be requested. Normal lease expiry, navigation and real disconnects
+still require their respective recovery steps.
+
+Do not apply this behavior to an older build reporting `waiting_for_read`: it
+blocks observation, screenshots and input, waits up to ten more seconds, then
+detaches at its hard deadline. Poll status within that declared interval; obtain
+a new observe if the same session survives, or reconnect explicitly and acquire
+new control after a detach. A missing `recovery` field does not establish support
+for the new implementation. Check the loaded version/build; updating source files
+alone does not reload the extension.
+
+A hidden or occluded Chrome window may not supply a frame; a timeout alone does
+not establish the cause. The bridge never foregrounds the window or uses system
+input. Background AX operations do not guarantee background screenshots. If the
+next edit requires visual evidence, keep it pending rather than act on old pixels
+or a guess.
+
+`BROWSER_TIMEOUT` from `vids_scroll` is a separate case. In the updated build,
+a pending `Input.dispatchMouseEvent` preserves attachment but status reports
+`recovery.state: input_ack_pending`, `blocks: ["mutations"]` and
+`requiresReconciliation: true`. AX/status remain available; all mutations,
+control release and reconciliation are blocked until the original Chrome command
+actually settles. The wheel may not have been sent yet and can execute later.
+A timeout is not cancellation: do not apply the screenshot mode's permission for
+fresh input to this pending mutation.
+
+Even after a late ACK or rejection, the scroll outcome remains `unknown`.
+Obtain a fresh `vids_observe`, establish the result and use
+`vids_reconcile_control` with evidence before another mutation. The end of
+`input_ack_pending` alone does not authorize a write; an ACK does not prove
+scrolling. Do not retry the scroll or switch gestures to repeat the same intent.
+This procedure requires the new mode in the loaded build. Other mutation timeouts
+retain the existing fail-closed/reconnect handling. Never foreground Chrome or use
+system input for recovery.
 
 An AX tree may show scene count, playhead and total duration without all scene
 boundaries. Do not infer exact timeline timing from thumbnail widths. Record

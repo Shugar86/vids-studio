@@ -15,8 +15,8 @@ export const PROFILE = Object.freeze({
   "extensionDescription": "Локальный мост Codex для одной явно подключённой вкладки Google Vids.",
   "extensionKey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxRbbOB91M96Zymgh0rkzXmDwe8Tde6oH5UhFcoLlb2PG949EhFuqwPKewPlgRBUgVufiro3+mA66muliNHNy3vAKCyH4tjMY9gLr2gwIIr7lgXthghvLs8cBNlxJprNocEVGKJJ3KiYE/AmwD3mUay0r222EhJFuWcIHypKN+Ci0Aq78frBzl2u+ikBMEKzQRAVgJs7EkQVctgwiAIe0TEENMiZ1Ou4wqoDUOWEl4M5IcM4Jyz9rwOKffUrQWhSQJIZOp551ips5lGP3YvnBZgrbSrYRKzu+tHWYjL/weyWFWap7UhAQvQhrhDeocTdg7Qvfz1zvaPgtqg8RTaRLAQIDAQAB",
   "version": "0.3.0",
-  "buildId": "296595d7e555ddba741910687af2d2b7b15f43d38caadffa26874c74ea5c0315",
-  "coreBuildId": "296595d7e555ddba741910687af2d2b7b15f43d38caadffa26874c74ea5c0315",
+  "buildId": "5b87c4c8585de511e123bbcc1d4185ee78c00137c5fca0f610a28e51d4fc5c09",
+  "coreBuildId": "5b87c4c8585de511e123bbcc1d4185ee78c00137c5fca0f610a28e51d4fc5c09",
   "protocol": 3,
   "extensionProtocol": 2
 });

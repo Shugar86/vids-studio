@@ -474,9 +474,55 @@ test("a stalled CDP command expires, revokes attachment and frees the request qu
   assert.equal((await f.request("status")).result.attached, false);
 });
 
+test("a screenshot held beyond the old hard deadline preserves attachment and fresh actions", async context => {
+  const f = fixture();
+  const stored = persistentStorage(f);
+  await f.driver.attach(f.tab);
+  const sessionId = f.driver.status().sessionId;
+  const snapshotId = (await f.request("observe")).result.snapshotId;
+  const command = holdNextCommand(f, "Page.captureScreenshot");
+  const decode = context.mock.method(globalThis, "atob");
+  context.mock.timers.enable({apis: ["setTimeout"]});
+  const pending = f.request("screenshot", {format: "jpeg", quality: 45});
+  await command.sent;
+  context.mock.timers.tick(10000);
+  const response = await pending;
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "BROWSER_TIMEOUT");
+  assert.equal(response.error.outcome, undefined, "a read timeout is not an uncertain mutation");
+  context.mock.timers.tick(30000);
+  assert.equal(f.driver.status().attached, true);
+  assert.equal(f.driver.status().sessionId, sessionId);
+  assert.equal(stored.vidsStudioActiveBindingV1.sessionId, sessionId);
+  assert.equal(stored.vidsStudioFencesV1, undefined);
+  assert.equal(f.calls.some(([method]) => method === "detach"), false);
+  assert.equal(f.nativeMessages.some(message => message.event === "detached"), false);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const repeated = await f.request("screenshot", {format: "jpeg", quality: 45});
+    assert.equal(repeated.ok, false);
+    assert.equal(repeated.error.code, "BROWSER_RECOVERING");
+    assert.equal(repeated.error.outcome, undefined);
+  }
+  assert.equal(f.calls.filter(([method]) => method === "Page.captureScreenshot").length, 1,
+    "an unresolved capture must not accumulate more browser captures");
+  assert.equal((await f.request("click", {snapshotId, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
+  const usable = (await f.request("observe")).result.snapshotId;
+  assert.equal((await f.request("click", {snapshotId: usable, x: 20, y: 20})).ok, true,
+    "fresh actions must remain usable while the old capture is unresolved");
+  const fresh = (await f.request("observe")).result.snapshotId;
+  command.acknowledge({data: "bGF0ZQ=="});
+  await new Promise(setImmediate);
+  assert.equal(decode.mock.calls.length, 0, "a late timed-out image must be discarded");
+  assert.equal(f.driver.status().sessionId, sessionId);
+  assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true,
+    "a late image must not invalidate a fresh AX snapshot");
+  assert.equal(f.calls.some(([method]) => method === "detach"), false);
+});
+
 for (const method of ["Page.captureScreenshot", "Page.getLayoutMetrics"]) {
   for (const completion of ["resolve", "reject"]) {
-    test(`screenshot recovery: ${method} late ${completion} quarantines input and requires fresh observation`, async context => {
+    test(`screenshot recovery: ${method} late ${completion} blocks only screenshots and preserves fresh actions`, async context => {
       const f = fixture();
       await f.driver.attach(f.tab);
       const sessionId = f.driver.status().sessionId;
@@ -492,61 +538,84 @@ for (const method of ["Page.captureScreenshot", "Page.getLayoutMetrics"]) {
       assert.equal(response.error.code, "BROWSER_TIMEOUT");
       assert.equal(response.error.outcome, undefined);
       assert.equal(f.driver.status().attached, true);
-      assert.equal((await queued).error.code, "BROWSER_RECOVERING");
+      assert.equal((await queued).error.code, "STALE_SNAPSHOT");
       const status = (await f.request("status")).result;
+      assert.equal(status.recovery.state, "screenshot_read_pending");
       assert.equal(status.recovery.method, method);
+      assert.equal(status.recovery.timeoutMs, 10000);
+      assert.deepEqual(status.recovery.blocks, ["screenshot"]);
+      assert.equal(status.recovery.requiresFreshObservation, true);
+      assert.equal("hardDeadlineMs" in status.recovery, false);
       const calls = f.calls.length;
-      for (const action of ["observe", "screenshot", "press_key"]) {
-        const blocked = await f.request(action, {snapshotId, key: "Enter"});
-        assert.equal(blocked.error.code, "BROWSER_RECOVERING");
-        assert.equal(blocked.error.outcome, undefined, "rejected before any mutation");
-      }
-      assert.equal(f.calls.length, calls, "no CDP until the original read actually settles");
+      const blocked = await f.request("screenshot");
+      assert.equal(blocked.error.code, "BROWSER_RECOVERING");
+      assert.equal(blocked.error.outcome, undefined);
+      assert.equal(f.calls.length, calls, "no new layout or capture while the original read is unresolved");
+      assert.equal((await f.request("press_key", {snapshotId, key: "Enter"})).error.code, "STALE_SNAPSHOT");
+      const usable = (await f.request("observe")).result.snapshotId;
+      assert.equal(f.driver.status().recovery.requiresFreshObservation, false);
+      assert.equal((await f.request("click", {snapshotId: usable, x: 20, y: 20})).ok, true);
+      const fresh = (await f.request("observe")).result.snapshotId;
+      const beforeLateReply = f.calls.length;
       if (completion === "resolve") command.acknowledge({data: "bGF0ZQ=="});
       else command.reject(new Error("private failure text must not enter diagnostics"));
       await new Promise(setImmediate);
       assert.equal(f.driver.status().sessionId, sessionId);
       assert.equal(f.driver.status().recovery, null);
-      assert.equal(f.calls.length, calls, "late reply must not continue the old screenshot");
+      assert.equal(f.calls.length, beforeLateReply, "late reply must not continue the old screenshot");
       assert.equal(decode.mock.calls.length, 0);
       assert.equal((await f.request("click", {snapshotId, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
-      const fresh = (await f.request("observe")).result.snapshotId;
       assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true);
       assert.equal(f.calls.filter(([name]) => name === "detach").length, 0);
       assert.equal(JSON.stringify(f.nativeMessages).includes("private failure text"), false);
       const phases = f.nativeMessages.filter(m => m.type === "diagnostic").map(m => m.phase);
       assert.deepEqual(phases, ["read_quarantined", `read_${completion === "resolve" ? "resolved" : "rejected"}`]);
     });
+    test(`screenshot recovery: old ${method} late ${completion} cannot clear a new session's pending read`, async context => {
+      const f = fixture();
+      await f.driver.attach(f.tab);
+      const oldSessionId = f.driver.status().sessionId;
+      const command = holdNextCommand(f, method);
+      const decode = context.mock.method(globalThis, "atob");
+      context.mock.timers.enable({apis: ["setTimeout"]});
+      const pending = f.request("screenshot");
+      await command.sent;
+      context.mock.timers.tick(10000);
+      assert.equal((await pending).error.code, "BROWSER_TIMEOUT");
+      context.mock.timers.tick(30000);
+      assert.equal(f.driver.status().sessionId, oldSessionId);
+      assert.equal(f.calls.filter(([name]) => name === "detach").length, 0);
+
+      // Reattachment is explicit: a screenshot deadline must never do this.
+      await f.driver.attach(f.tab);
+      const newSessionId = f.driver.status().sessionId;
+      const nextCommand = holdNextCommand(f, method);
+      const nextPending = f.request("screenshot");
+      await nextCommand.sent;
+      context.mock.timers.tick(10000);
+      assert.equal((await nextPending).error.code, "BROWSER_TIMEOUT");
+      const fresh = (await f.request("observe")).result.snapshotId;
+      const calls = f.calls.length;
+      if (completion === "resolve") command.acknowledge({data: "bGF0ZQ=="});
+      else command.reject(new Error("obsolete private Chrome failure"));
+      await new Promise(setImmediate);
+      assert.notEqual(newSessionId, oldSessionId);
+      assert.equal(f.driver.status().sessionId, newSessionId);
+      assert.equal(f.driver.status().recovery.state, "screenshot_read_pending");
+      assert.equal(f.driver.status().recovery.method, method);
+      assert.equal(f.driver.status().recovery.requiresFreshObservation, false);
+      assert.equal(f.calls.length, calls);
+      assert.equal(decode.mock.calls.length, 0);
+      assert.equal((await f.request("observe", {}, {sessionId: oldSessionId})).error.code, "SESSION_MISMATCH");
+      assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true);
+      nextCommand.reject(new Error("new read finished without an image"));
+      await new Promise(setImmediate);
+      assert.equal(f.driver.status().recovery, null);
+      assert.equal(f.driver.status().sessionId, newSessionId);
+      assert.equal(f.calls.filter(([name]) => name === "detach").length, 1);
+      assert.equal(JSON.stringify(f.nativeMessages).includes("obsolete private Chrome failure"), false);
+    });
   }
-  test(`screenshot recovery: ${method} never settles, hard deadline revokes and late ACK cannot affect a new session`, async context => {
-    const f = fixture();
-    await f.driver.attach(f.tab);
-    const oldSessionId = f.driver.status().sessionId;
-    const snapshotId = (await f.request("observe")).result.snapshotId;
-    const command = holdNextCommand(f, method);
-    const decode = context.mock.method(globalThis, "atob");
-    context.mock.timers.enable({apis: ["setTimeout"]});
-    const pending = f.request("screenshot");
-    await command.sent;
-    context.mock.timers.tick(10000);
-    assert.equal((await pending).error.code, "BROWSER_TIMEOUT");
-    assert.equal(f.driver.status().attached, true);
-    context.mock.timers.tick(10000);
-    assert.equal(f.driver.status().attached, false);
-    assert.equal(f.calls.filter(([name]) => name === "detach").length, 1);
-    await f.driver.attach(f.tab);
-    const newSessionId = f.driver.status().sessionId;
-    const fresh = (await f.request("observe")).result.snapshotId;
-    const calls = f.calls.length;
-    command.acknowledge({data: "bGF0ZQ=="});
-    await new Promise(setImmediate);
-    assert.notEqual(newSessionId, oldSessionId);
-    assert.equal(f.driver.status().sessionId, newSessionId);
-    assert.equal(f.calls.length, calls);
-    assert.equal(decode.mock.calls.length, 0);
-    assert.equal((await f.request("click", {snapshotId, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
-    assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true);
-  });
 }
 
 for (const change of ["navigation", "native_disconnect"]) {
@@ -592,30 +661,197 @@ for (const method of ["observe", "click"]) {
   });
 }
 
-test("wheel CDP timeout revokes authority, marks outcome unknown and never repeats input after a late ACK", async context => {
+test("mixed pending screenshot and wheel report both gates and settle independently", async context => {
   const f = fixture();
   await f.driver.attach(f.tab);
-  const snapshotId = (await f.request("observe")).result.snapshotId;
-  const command = holdNextCommand(f, "Input.dispatchMouseEvent", params => params.type === "mouseWheel");
+  const sessionId = f.driver.status().sessionId;
+  const capture = holdNextCommand(f, "Page.captureScreenshot");
+  const decode = context.mock.method(globalThis, "atob");
   context.mock.timers.enable({apis: ["setTimeout"]});
-  const pending = f.request("scroll", {snapshotId, x: 20, y: 20, deltaX: -8000, deltaY: 0});
-  await command.sent;
-  const queued = f.request("click", {snapshotId, x: 20, y: 20});
+  const screenshot = f.request("screenshot");
+  await capture.sent;
   context.mock.timers.tick(10000);
-  const response = await pending;
-  assert.equal(response.error.code, "BROWSER_TIMEOUT");
-  assert.ok(response.error.message.includes("Input.dispatchMouseEvent"));
-  assert.equal(response.error.outcome, "unknown");
-  assert.equal((await queued).error.code, "NOT_ATTACHED");
-  assert.equal((await f.request("status")).result.attached, false);
-  command.acknowledge({});
+  assert.equal((await screenshot).error.code, "BROWSER_TIMEOUT");
+  const observed = (await f.request("observe")).result;
+  const wheel = holdNextCommand(f, "Input.dispatchMouseEvent", params => params.type === "mouseWheel");
+  const scroll = f.request("scroll", {snapshotId: observed.snapshotId, x: 20, y: 20, deltaY: 100}, {id: "mixed-wheel"});
+  await wheel.sent;
+  context.mock.timers.tick(10000);
+  assert.equal((await scroll).settled, false);
+  const both = (await f.request("status")).result;
+  assert.equal(both.sessionId, sessionId);
+  assert.equal(both.recovery.state, "input_ack_pending");
+  assert.deepEqual(both.recovery.blocks, ["mutations", "screenshot"]);
+  const calls = f.calls.length;
+  assert.equal((await f.request("screenshot")).error.code, "BROWSER_RECOVERING");
+  assert.equal(f.calls.length, calls);
+
+  capture.acknowledge({data: "bGF0ZQ=="});
   await new Promise(setImmediate);
-  assert.equal(f.driver.status().sessionId, null);
-  assert.deepEqual(f.calls.filter(([method]) => method === "Input.dispatchMouseEvent"), [
-    ["Input.dispatchMouseEvent", {type: "mouseWheel", x: 20, y: 20, deltaX: -8000, deltaY: 0}],
-  ]);
-  assert.equal(f.calls.filter(([method]) => method === "detach").length, 1);
+  assert.equal(decode.mock.calls.length, 0);
+  assert.equal(f.driver.status().recovery.state, "input_ack_pending");
+  assert.deepEqual(f.driver.status().recovery.blocks, ["mutations"]);
+  const beforeSettlement = (await f.request("observe")).result.snapshotId;
+  assert.equal((await f.request("click", {snapshotId: beforeSettlement, x: 20, y: 20})).error.code, "BROWSER_RECOVERING");
+  wheel.acknowledge({});
+  await new Promise(setImmediate);
+  assert.equal(f.driver.status().recovery, null);
+  assert.equal(f.driver.status().sessionId, sessionId);
+  const settlement = f.nativeMessages.find(message => message.type === "response" && message.id === "mixed-wheel");
+  assert.equal(settlement.sessionId, sessionId);
+  assert.equal(settlement.settled, true);
+  assert.equal(settlement.error.outcome, "unknown");
+  assert.equal((await f.request("click", {snapshotId: beforeSettlement, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
+  const fresh = (await f.request("observe")).result.snapshotId;
+  assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true);
+  assert.equal(f.calls.filter(([method]) => method === "Page.captureScreenshot").length, 1);
+  assert.equal(f.calls.filter(([method, params]) => method === "Input.dispatchMouseEvent" && params.type === "mouseWheel").length, 1);
+  assert.equal(f.calls.some(([method]) => method === "detach"), false);
 });
+
+for (const completion of ["resolve", "reject"]) {
+  test(`wheel timeout keeps attachment, blocks mutations and reports late ${completion} without replay`, async context => {
+    const f = fixture({exportMenu: true});
+    const stored = persistentStorage(f);
+    await f.driver.attach(f.tab);
+    const sessionId = f.driver.status().sessionId;
+    const snapshotId = (await f.request("observe")).result.snapshotId;
+    const command = holdNextCommand(f, "Input.dispatchMouseEvent", params => params.type === "mouseWheel");
+    context.mock.timers.enable({apis: ["setTimeout"]});
+    const envelope = {v: 2, type: "request", id: "held-wheel", sessionId, method: "scroll",
+      params: {snapshotId, x: 20, y: 20, deltaX: -8000, deltaY: 0}};
+    const pending = f.driver.handleRequest(envelope);
+    await command.sent;
+    const queued = f.request("click", {snapshotId, x: 20, y: 20});
+    context.mock.timers.tick(10000);
+    const response = await pending;
+    assert.equal(response.ok, false);
+    assert.equal(response.error.code, "BROWSER_TIMEOUT");
+    assert.match(response.error.message, /scroll/i);
+    assert.equal(response.error.outcome, "unknown");
+    assert.equal(response.settled, false);
+    assert.equal(response.sessionId, sessionId);
+    assert.equal((await queued).error.code, "BROWSER_RECOVERING");
+    context.mock.timers.tick(30000);
+    const status = (await f.request("status")).result;
+    assert.equal(status.attached, true);
+    assert.equal(status.sessionId, sessionId);
+    assert.equal(status.recovery.state, "input_ack_pending");
+    assert.equal(status.recovery.method, "Input.dispatchMouseEvent");
+    assert.equal(status.recovery.timeoutMs, 10000);
+    assert.deepEqual(status.recovery.blocks, ["mutations"]);
+    assert.equal(status.recovery.requiresReconciliation, true);
+    assert.equal(status.recovery.requiresFreshObservation, true);
+    assert.equal(stored.vidsStudioActiveBindingV1.sessionId, sessionId);
+    assert.equal(stored.vidsStudioFencesV1, undefined);
+    assert.equal(f.calls.some(([method]) => method === "detach"), false);
+
+    const observed = (await f.request("observe")).result;
+    const calls = f.calls.length;
+    const params = {snapshotId: observed.snapshotId, x: 20, y: 20, deltaY: 100,
+      from: {x: 20, y: 20}, to: {x: 40, y: 20}, key: "Enter", text: "must not be typed",
+      files: ["/tmp/must-not-be-uploaded.png"], automaticDownloadConfirmed: true,
+      downloadModeCheckedAt: new Date().toISOString(), jobId: "must-not-be-exported"};
+    for (const method of ["scroll", "click", "drag", "type_text", "press_key", "upload", "upload_via_picker", "export_trigger"]) {
+      const blocked = await f.request(method, params);
+      assert.equal(blocked.error.code, "BROWSER_RECOVERING", method);
+      assert.equal(blocked.error.outcome, undefined, "the blocked mutation has not started");
+    }
+    assert.strictEqual(await f.driver.handleRequest(envelope), response);
+    assert.equal(f.calls.length, calls, "pending input forbids dispatch or preflight of another mutation");
+    assert.equal(f.nativeMessages.some(message => message.type === "response" && message.id === envelope.id), false);
+    if (completion === "resolve") command.acknowledge({});
+    else command.reject(new Error("private late wheel failure"));
+    await new Promise(setImmediate);
+    assert.equal(f.driver.status().sessionId, sessionId);
+    assert.equal(f.driver.status().recovery, null);
+    assert.equal(f.calls.length, calls, "late completion must not replay or send cleanup input");
+    const settlements = f.nativeMessages.filter(message => message.type === "response" && message.id === envelope.id);
+    assert.equal(settlements.length, 1);
+    assert.equal(settlements[0].sessionId, sessionId);
+    assert.equal(settlements[0].settled, true);
+    assert.equal(settlements[0].ok, false);
+    assert.equal(settlements[0].error.code, "BROWSER_TIMEOUT");
+    assert.equal(settlements[0].error.outcome, "unknown");
+    assert.equal(JSON.stringify(f.nativeMessages).includes("private late wheel failure"), false);
+    assert.equal((await f.request("click", {snapshotId, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
+    assert.equal((await f.request("click", {snapshotId: observed.snapshotId, x: 20, y: 20})).error.code, "STALE_SNAPSHOT",
+      "an observation made before input settled cannot authorize a later mutation");
+    assert.deepEqual(f.calls.filter(([method]) => method === "Input.dispatchMouseEvent"), [
+      ["Input.dispatchMouseEvent", {type: "mouseWheel", x: 20, y: 20, deltaX: -8000, deltaY: 0}],
+    ]);
+    const fresh = (await f.request("observe")).result.snapshotId;
+    assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true);
+    assert.equal(f.calls.some(([method]) => method === "detach"), false);
+  });
+
+  test(`old wheel late ${completion} cannot settle a different session's input`, async context => {
+    const f = fixture();
+    await f.driver.attach(f.tab);
+    const oldSessionId = f.driver.status().sessionId;
+    const snapshotId = (await f.request("observe")).result.snapshotId;
+    const oldCommand = holdNextCommand(f, "Input.dispatchMouseEvent", params => params.type === "mouseWheel");
+    context.mock.timers.enable({apis: ["setTimeout"]});
+    const oldPending = f.request("scroll", {snapshotId, x: 20, y: 20, deltaY: 100}, {id: "old-wheel"});
+    await oldCommand.sent;
+    context.mock.timers.tick(10000);
+    assert.equal((await oldPending).settled, false);
+    await f.driver.attach(f.tab);
+    const sessionId = f.driver.status().sessionId;
+    assert.notEqual(sessionId, oldSessionId);
+    const nextSnapshot = (await f.request("observe")).result.snapshotId;
+    const nextCommand = holdNextCommand(f, "Input.dispatchMouseEvent", params => params.type === "mouseWheel");
+    const nextPending = f.request("scroll", {snapshotId: nextSnapshot, x: 20, y: 20, deltaY: 100}, {id: "new-wheel"});
+    await nextCommand.sent;
+    context.mock.timers.tick(10000);
+    assert.equal((await nextPending).settled, false);
+    const calls = f.calls.length;
+    if (completion === "resolve") oldCommand.acknowledge({});
+    else oldCommand.reject(new Error("obsolete wheel failure"));
+    await new Promise(setImmediate);
+    assert.equal(f.driver.status().sessionId, sessionId);
+    assert.equal(f.driver.status().recovery.state, "input_ack_pending");
+    assert.equal(f.calls.length, calls);
+    assert.equal(f.nativeMessages.some(message => message.type === "response" && message.id === "old-wheel"), false);
+    nextCommand.acknowledge({});
+    await new Promise(setImmediate);
+    assert.equal(f.driver.status().recovery, null);
+    const settlements = f.nativeMessages.filter(message => message.type === "response" && message.id === "new-wheel");
+    assert.equal(settlements.length, 1);
+    assert.equal(settlements[0].sessionId, sessionId);
+    assert.equal(settlements[0].settled, true);
+    assert.equal(f.calls.length, calls);
+    assert.equal(f.calls.filter(([method]) => method === "detach").length, 1, "only explicit reattachment detached");
+  });
+}
+
+for (const mutation of [
+  {method: "click", command: "Input.dispatchMouseEvent", matches: params => params.type === "mouseMoved"},
+  {method: "type_text", command: "Input.insertText", matches: () => true},
+]) {
+  test(`${mutation.method} CDP timeout remains fail-closed outside wheel recovery`, async context => {
+    const f = fixture();
+    await f.driver.attach(f.tab);
+    const observed = (await f.request("observe")).result;
+    const command = holdNextCommand(f, mutation.command, mutation.matches);
+    context.mock.timers.enable({apis: ["setTimeout"]});
+    const pending = f.request(mutation.method, {snapshotId: observed.snapshotId, x: 20, y: 20,
+      ...(mutation.method === "type_text" ? {nodeRef: observed.nodes.find(node => node.name === "Caption").ref, text: "only once"} : {})});
+    await command.sent;
+    context.mock.timers.tick(10000);
+    const response = await pending;
+    assert.equal(response.error.code, "BROWSER_TIMEOUT");
+    assert.equal(response.error.outcome, "unknown");
+    assert.notEqual(response.settled, false);
+    assert.equal(f.driver.status().attached, false);
+    const calls = f.calls.length;
+    command.acknowledge({});
+    await new Promise(setImmediate);
+    assert.equal(f.calls.length, calls);
+    assert.equal(f.driver.status().recovery, null);
+    assert.equal(f.calls.filter(([method]) => method === "detach").length, 1);
+  });
+}
 
 test("forbidden shortcuts are rejected before any CDP keyboard input", async () => {
   const f = fixture();

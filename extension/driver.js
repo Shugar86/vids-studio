@@ -13,8 +13,8 @@ export const CAPABILITIES = [
 ];
 const SNAPSHOT_MAX_AGE_MS = 120000;
 const CDP_TIMEOUT_MS = 10000;
-const READ_RECOVERY_MS = 10000;
 const SCREENSHOT_READS = new Set(["Page.getLayoutMetrics", "Page.captureScreenshot"]);
+const READ_OPERATIONS = new Set(["observe", "screenshot", "export_download_status"]);
 const FILE_CHOOSER_TIMEOUT_MS = 5000;
 const DRAG_STEP_INTERVAL_MS = 20;
 
@@ -38,11 +38,16 @@ export function createDriver(chromeApi) {
       capabilities: [...CAPABILITIES], lastError,
       runtime: {extension: {version: PROFILE.version, buildId: PROFILE.buildId,
         profileId: PROFILE.id, protocol: PROFILE.extensionProtocol}},
-      recovery: session?.pendingRead ? {
-        state: "waiting_for_read", method: session.pendingRead.method,
+      recovery: session?.pendingInput ? {
+        state: "input_ack_pending", method: session.pendingInput.method,
+        elapsedMs: Math.max(0, Date.now() - session.pendingInput.started),
+        timeoutMs: CDP_TIMEOUT_MS, blocks: session.pendingRead ? ["mutations", "screenshot"] : ["mutations"],
+        requiresReconciliation: true, requiresFreshObservation: true,
+      } : session?.pendingRead ? {
+        state: "screenshot_read_pending", method: session.pendingRead.method,
         elapsedMs: Math.max(0, Date.now() - session.pendingRead.started),
-        hardDeadlineMs: CDP_TIMEOUT_MS + READ_RECOVERY_MS,
-        requiresFreshObservation: true,
+        timeoutMs: CDP_TIMEOUT_MS, blocks: ["screenshot"],
+        requiresFreshObservation: !session.snapshot,
       } : null,
     };
   }
@@ -70,20 +75,19 @@ export function createDriver(chromeApi) {
     } catch { /* Diagnostic failure must not change browser authority. */ }
   }
 
-  function requireReady(target) {
+  function requireScreenshotReady(target) {
     if (target.pendingRead) fail("BROWSER_RECOVERING",
-      "A timed-out screenshot read is still pending. Check status; after recovery, observe afresh before acting. No action was sent.");
+      "The previous screenshot read is still pending in Chrome. Use observe for a fresh snapshot; check status/control for any unresolved mutation before editing. The tab remains attached. No new screenshot was sent.");
   }
 
   async function cdp(target, method, params = {}, screenshotRead = false) {
     ensureCurrent(target);
-    requireReady(target);
     const recoverable = screenshotRead && SCREENSHOT_READS.has(method);
-    const read = {method, started: Date.now(), timer: null};
+    if (recoverable) requireScreenshotReady(target);
+    const read = {method, started: Date.now()};
     const command = chromeApi.debugger.sendCommand({tabId: target.tabId}, method, params);
     const settled = phase => {
       if (session !== target || target.pendingRead !== read) return;
-      clearTimeout(read.timer);
       target.pendingRead = null;
       // Discard the timed-out result; only a new observation can create a
       // snapshot. A late callback can never continue the old operation.
@@ -97,18 +101,16 @@ export function createDriver(chromeApi) {
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             const error = new Error(recoverable
-              ? `Chrome did not answer ${method}. The read is quarantined; check status, then observe afresh. Do not repeat a mutation.`
+              ? `Chrome did not answer ${method} within 10 seconds. The screenshot is unavailable; the background or occluded window may not be rendering. The tab remains attached. Use observe for a fresh snapshot and continue; further screenshots wait for this read to settle.`
               : `Chrome did not answer ${method}. Reattach and inspect the document before retrying.`);
             error.code = "BROWSER_TIMEOUT";
             if (session === target && recoverable) {
               invalidate(target);
               target.pendingRead = read;
               diagnostic(target, "read_quarantined", method, read.started);
-              read.timer = setTimeout(() => {
-                if (session !== target || target.pendingRead !== read) return;
-                diagnostic(target, "read_recovery_expired", method, read.started);
-                void detach("Chrome не завершил чтение снимка. Подключите вкладку заново и получите свежее наблюдение.");
-              }, READ_RECOVERY_MS);
+              // This read cannot dispatch input or publish a late snapshot.
+              // Keep its slot until it actually settles so repeated screenshots
+              // cannot pile up, but do not revoke the session or block AX/input.
             } else if (session === target) {
               diagnostic(target, "cdp_timeout", method, read.started);
               // Mutations and other reads still fail closed. No cancellation
@@ -139,14 +141,55 @@ export function createDriver(chromeApi) {
     if (failure) throw failure.reason;
   }
 
+  async function scrollWheel(target, params, requestId) {
+    ensureCurrent(target);
+    const input = {method: "Input.dispatchMouseEvent", started: Date.now(), requestId};
+    const command = chromeApi.debugger.sendCommand({tabId: target.tabId}, input.method, params);
+    // Chrome may wait for a visual frame BEFORE dispatching the wheel. A
+    // timeout is neither cancellation nor proof that scrolling already ran.
+    const settled = () => {
+      if (session !== target || target.pendingInput !== input) return;
+      target.pendingInput = null;
+      invalidate(target);
+      try {
+        target.port?.postMessage({v: 2, type: "response", id: requestId,
+          sessionId: target.id, ok: false, settled: true,
+          error: {code: "BROWSER_TIMEOUT", outcome: "unknown",
+            message: "The earlier scroll has now settled in Chrome, but its effect remains unknown. Observe afresh and reconcile control before another mutation. Do not replay the scroll."}});
+      } catch { /* Missing settlement keeps the native coordinator blocked. */ }
+    };
+    void command.then(settled, settled);
+    let timer;
+    try {
+      await Promise.race([
+        command,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            const error = new Error("Chrome has not acknowledged the scroll within 10 seconds. The tab remains attached, but the scroll may still execute. Observe/status remain available; new mutations and transfer of control must wait for settlement and reconciliation. Do not repeat the scroll.");
+            error.code = "BROWSER_TIMEOUT";
+            if (session === target) {
+              invalidate(target);
+              target.pendingInput = input;
+              error.inputUnsettled = true;
+              diagnostic(target, "cdp_timeout", input.method, input.started);
+            }
+            reject(error);
+          }, CDP_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function detach(reason = null, skipDebugger = false) {
     attachGeneration += 1;
     const old = session;
     session = null;
     lastError = reason;
     if (!old) return status();
-    clearTimeout(old.pendingRead?.timer);
     old.pendingRead = null;
+    old.pendingInput = null;
     exports.revoke(old.id);
     old.fileChooser?.cancel("NOT_ATTACHED", "The attached session ended while waiting for a file chooser.");
     invalidate(old);
@@ -819,7 +862,7 @@ export function createDriver(chromeApi) {
     }
   }
 
-  async function mutate(target, method, params, snapshot) {
+  async function mutate(target, method, params, snapshot, requestId) {
     const bounds = await viewport(target);
     if (target.snapshot !== snapshot) fail("STALE_SNAPSHOT", "The document changed before the action. Observe again.");
     if (bounds.width !== snapshot.viewport.width || bounds.height !== snapshot.viewport.height) {
@@ -889,7 +932,7 @@ export function createDriver(chromeApi) {
       const position = point(params, bounds);
       const deltaX = finiteNumber(params.deltaX ?? 0, "deltaX", -100000, 100000);
       const deltaY = finiteNumber(params.deltaY, "deltaY", -100000, 100000);
-      await cdp(target, "Input.dispatchMouseEvent", {type: "mouseWheel", ...position, deltaX, deltaY});
+      await scrollWheel(target, {type: "mouseWheel", ...position, deltaX, deltaY}, requestId);
     } else if (method === "type_text") {
       string(params.text, "text", 100000, true);
       if (params.replace !== undefined && typeof params.replace !== "boolean") fail("INVALID_ARGUMENT", "replace must be boolean.");
@@ -935,7 +978,8 @@ export function createDriver(chromeApi) {
       } else {
         if (!CAPABILITIES.includes(request.method)) fail("UNKNOWN_METHOD", "This browser operation is not exposed.");
         const target = await requireSession(request.sessionId);
-        requireReady(target);
+        if (target.pendingInput && !READ_OPERATIONS.has(request.method)) fail("BROWSER_RECOVERING",
+          "A timed-out scroll is still pending in Chrome. Observe/status remain available, but no new mutation is allowed until it settles and control is reconciled. Do not replay it.");
         if (request.method === "observe") result = await observe(target, params);
         else if (request.method === "screenshot") result = await screenshot(target, params);
         else if (request.method === "export_download_status") result = await exports.status(params.jobId, target.id);
@@ -965,19 +1009,21 @@ export function createDriver(chromeApi) {
         else {
           const snapshot = requireSnapshot(target, params.snapshotId);
           mutationStarted = true;
-          result = await mutate(target, request.method, params, snapshot);
+          result = await mutate(target, request.method, params, snapshot, id);
         }
       }
       return {v: 2, type: "response", id, ok: true, result};
     } catch (error) {
       const detail = safeError(error);
       if (mutationStarted) detail.outcome = "unknown";
-      return {v: 2, type: "response", id, ok: false, error: detail};
+      return {v: 2, type: "response", id, ok: false, error: detail,
+        ...(error?.inputUnsettled === true ? {settled: false, sessionId: request.sessionId} : {})};
     }
   }
 
   function handleRequest(request) {
-    // Serialize even read requests: a screenshot must not race a keyboard action.
+    // Serialize active requests. A timed-out screenshot read is discard-only:
+    // it cannot publish a snapshot, and only another screenshot must wait for it.
     // Repeated ids return their prior promise, never repeat an input operation.
     const key = typeof request?.id === "string" ? `${request.sessionId || "status"}:${request.id}` : null;
     if (key && completed.has(key)) return completed.get(key);
