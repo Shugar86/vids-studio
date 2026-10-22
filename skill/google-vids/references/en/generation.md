@@ -84,6 +84,13 @@ plausible and within the authorized preparation scope; remove reversed audio and
 check both new boundaries. A silent on-screen character must also look silent:
 absence of an audio track does not rule out unintended lip articulation.
 
+Verify identity and action within the same selected range. A recognizable opening
+may lack the requested gesture; a later gesture may contain facial drift. Do not
+infer a universal safe duration from one take. Freeze, reverse and trimming must
+preserve the required event and physical plausibility; recheck the new entrance,
+exit and sound. Removing the action or changing its meaning is a different scene,
+not a successful repair of the original one.
+
 ### Person and object in one take
 
 When a scene depends on “the object acts → the person reacts,” stage both in one

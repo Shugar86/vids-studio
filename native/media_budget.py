@@ -54,7 +54,11 @@ def snapshot(directory):
     for index in range(2):
         marker = directory / f"slot-{index}.json"
         if marker.exists():
-            value = read_marker(marker)
+            try:
+                value = read_marker(marker)
+            except FileNotFoundError:
+                # A confirmed release may unlink between exists and open.
+                continue
             result["slots"].append({"slot": index, **{key: value.get(key) for key in ("leaseId", "jobId", "ownerPid", "helperPid", "startedAt")}})
     return result
 
@@ -71,18 +75,27 @@ def reserve(directory, owner, maximum):
         occupied, stale = set(), 0
         for index in range(2):
             marker = directory / f"slot-{index}.json"
-            if not marker.exists():
-                continue
-            read_marker(marker)
-            occupied.add(index)
+            marked = False
+            if marker.exists():
+                try:
+                    read_marker(marker)
+                except FileNotFoundError:
+                    pass  # Normal release may have removed it during this scan.
+                else:
+                    marked = True
+                    occupied.add(index)
             fd = secure_open(directory / f"slot-{index}.lock", os.O_RDWR | os.O_CREAT)
             try:
                 assert_private_file(directory / f"slot-{index}.lock")
                 try:
                     lock_file(fd)
-                    stale += 1
+                    if marked:
+                        stale += 1
                 except BlockingIOError:
-                    pass
+                    # Release removes the marker before closing its lock.
+                    # Count that lock even without metadata; otherwise a new
+                    # worker could take the other slot above the shared cap.
+                    occupied.add(index)
             finally:
                 os.close(fd)
         if len(occupied) >= maximum:

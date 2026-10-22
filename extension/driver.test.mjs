@@ -156,7 +156,15 @@ test("guarded export binds a fresh MP4 click to its frame and exact download rec
   const observed = (await request('observe')).result;
   const params = {jobId: 'job-export-real-guard', nodeRef: observed.nodes.find(node => node.name.startsWith('MP4')).ref,
     snapshotId: observed.snapshotId, automaticDownloadConfirmed: true, downloadModeCheckedAt: new Date().toISOString()};
+  const beforeCommands = f.calls.length;
+  assert.deepEqual((await request('export_preflight')).result, {sessionId, documentId: 'fixture', exportWatch: null});
+  assert.equal(f.calls.length, beforeCommands, 'Preflight must not dispatch CDP');
   assert.equal((await request('export_trigger', params)).ok, true);
+  const pending = (await request('export_preflight')).result;
+  assert.equal(pending.exportWatch.state, 'armed');
+  assert.equal(pending.exportWatch.triggerOutcome, 'performed');
+  assert.equal(pending.sessionId, sessionId);
+  assert.equal((await request('export_preflight', {}, 'foreign-session')).error.code, 'SESSION_MISMATCH');
   created({id: 999, url: 'https://unrelated.invalid/export.mp4', startTime: new Date().toISOString()});
   driver.onDebuggerEvent({tabId: f.tab.id}, 'Page.downloadWillBegin', {frameId: 'main', guid: 'export-guid', url, suggestedFilename: 'export.mp4'});
   created({id: 51, url, referrer: f.tab.url, startTime: new Date().toISOString()});
@@ -169,6 +177,19 @@ test("guarded export binds a fresh MP4 click to its frame and exact download rec
   assert.deepEqual(searches, [{id: 51}]);
   await driver.detach();
   assert.equal((await request('export_download_status', {jobId: params.jobId})).error.code, 'NOT_ATTACHED');
+});
+
+test("fresh export preflight bypasses a held CDP read without invalidating its snapshot", async () => {
+  const f = fixture(); await f.driver.attach(f.tab);
+  const held = holdNextCommand(f, "Accessibility.getFullAXTree");
+  const observe = f.request("observe"); await held.sent;
+  const commands = f.calls.length;
+  const response = await Promise.race([f.request("export_preflight"),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Preflight queued behind CDP")), 500))]);
+  assert.equal(response.ok, true); assert.equal(response.result.exportWatch, null);
+  assert.equal(f.calls.length, commands);
+  held.acknowledge({nodes: []}); assert.equal((await observe).ok, true);
+  await f.driver.detach();
 });
 
 test("missing durable storage rejects attachment before any debugger command", async () => {

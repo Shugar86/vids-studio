@@ -9,7 +9,8 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'native'))
-from media_budget import acquire, budget_limit, clear, snapshot
+import media_budget
+from media_budget import acquire, budget_limit, clear, reserve, snapshot
 
 
 class FixedResources:
@@ -101,6 +102,54 @@ class MediaBudgetTests(unittest.TestCase):
         inbox2.put({'action': 'release', 'leaseId': lease2['leaseId']}); second.join(2)
         lease3 = self.event(events3, 'acquired')
         inbox3.put({'action': 'release', 'leaseId': lease3['leaseId']}); third.join(2)
+
+    def test_marker_disappearance_never_reuses_a_still_locked_slot(self):
+        media_budget.ensure_private_directory(self.directory)
+        held, stale = reserve(self.directory, {'jobId': 'first', 'ownerPid': os.getpid()}, 1)
+        fd, _, marker, _ = held
+        original_read = media_budget.read_marker
+        def remove_before_read(path):
+            marker.unlink()
+            return original_read(path)
+        try:
+            # Normal release deletes metadata just before closing its OS lock.
+            # A scan that already saw the marker must tolerate that unlink,
+            # but its keeper still occupies capacity until the lock closes.
+            with patch('media_budget.read_marker', side_effect=remove_before_read):
+                admitted, _ = reserve(self.directory, {'jobId': 'second', 'ownerPid': os.getpid()}, 1)
+            self.assertIsNone(admitted)
+            admitted, _ = reserve(self.directory, {'jobId': 'third', 'ownerPid': os.getpid()}, 1)
+            self.assertIsNone(admitted, 'Missing metadata must not hide the still-held OS lock')
+            self.assertFalse((self.directory / 'slot-1.json').exists())
+        finally:
+            os.close(fd)
+        admitted, _ = reserve(self.directory, {'jobId': 'after-close', 'ownerPid': os.getpid()}, 1)
+        self.assertIsNotNone(admitted)
+        os.close(admitted[0])
+        clear(self.directory, admitted[1], admitted[3])
+
+    def test_snapshot_tolerates_a_released_marker_but_keeps_validation_failures(self):
+        media_budget.ensure_private_directory(self.directory)
+        held, _ = reserve(self.directory, {'jobId': 'first', 'ownerPid': os.getpid()}, 1)
+        fd, _, marker, _ = held
+        original_read = media_budget.read_marker
+        def remove_before_read(path):
+            marker.unlink()
+            return original_read(path)
+        try:
+            with patch('media_budget.read_marker', side_effect=remove_before_read):
+                self.assertEqual(snapshot(self.directory)['slots'], [])
+        finally:
+            os.close(fd)
+        for failure in (PermissionError('unsafe ACL'), ValueError('malformed marker')):
+            marker.write_text('{}')
+            marker.chmod(0o600)
+            with patch('media_budget.read_marker', side_effect=failure):
+                with self.assertRaises(type(failure)):
+                    snapshot(self.directory)
+                with self.assertRaises(type(failure)):
+                    reserve(self.directory, {'jobId': 'blocked', 'ownerPid': os.getpid()}, 1)
+            marker.unlink()
 
 
 if __name__ == '__main__':

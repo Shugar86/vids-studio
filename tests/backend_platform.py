@@ -6,8 +6,11 @@ import json
 import os
 from pathlib import Path
 import socket
+import subprocess
 import threading
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from backend_native import bridge
 from platform_support import ensure_private_directory, secure_open, assert_private_file, lock_file
@@ -59,6 +62,100 @@ class TransportAuthenticationTests(unittest.TestCase):
 
 
 class PrivatePlatformTests(unittest.TestCase):
+    def test_media_marker_unlink_keeps_capacity_until_native_lock_closes(self):
+        import media_budget as media
+        with private_temporary_directory(Path.home().resolve()) as directory:
+            private = directory / 'media'
+            ensure_private_directory(private)
+            held, _ = media.reserve(private, {'jobId': 'first', 'ownerPid': os.getpid()}, 1)
+            fd, _, marker, _ = held
+            original_read = media.read_marker
+            def unlink_before_read(path):
+                marker.unlink()
+                return original_read(path)
+            try:
+                with patch.object(media, 'read_marker', side_effect=unlink_before_read):
+                    self.assertIsNone(media.reserve(private, {'jobId': 'raced', 'ownerPid': os.getpid()}, 1)[0])
+                self.assertIsNone(media.reserve(private, {'jobId': 'later', 'ownerPid': os.getpid()}, 1)[0])
+            finally:
+                os.close(fd)
+            admitted, _ = media.reserve(private, {'jobId': 'after-close', 'ownerPid': os.getpid()}, 1)
+            self.assertIsNotNone(admitted)
+            os.close(admitted[0])
+            media.clear(private, admitted[1], admitted[3])
+
+    def test_windows_concurrent_creation_revalidates_every_co_created_directory(self):
+        # Model the exact check/CreateDirectory race on every OS. The native
+        # Windows test below also exercises real protected directory creation.
+        import platform_support as security
+        parent = Path.home().resolve()
+        target = parent / 'fixture-raced-directory'
+        class WindowsError(Exception):
+            def __init__(self, number):
+                self.winerror = number
+        for obstruction in (None, 'widened ACL', 'reparse point', 'not a directory'):
+            with self.subTest(obstruction=obstruction):
+                created = False
+                checks = []
+                def check(path, **options):
+                    checks.append((path, options))
+                    if path == target and not created:
+                        raise FileNotFoundError()
+                    if path == target and created:
+                        self.assertEqual(options, {'private': True, 'directory': True})
+                        if obstruction:
+                            raise PermissionError(obstruction)
+                def create(path, attributes):
+                    nonlocal created
+                    created = True
+                    raise WindowsError(183)
+                with patch.object(security, '_windows_path', return_value=(target, [parent, target])), \
+                     patch.object(security, '_windows_check', side_effect=check), \
+                     patch.object(security, '_attributes', return_value=object()), \
+                     patch.object(security, 'win32file', SimpleNamespace(CreateDirectory=create), create=True), \
+                     patch.object(security, 'pywintypes', SimpleNamespace(error=WindowsError), create=True):
+                    if obstruction:
+                        with self.assertRaisesRegex(PermissionError, obstruction):
+                            security._windows_ancestors(target, create=True)
+                    else:
+                        self.assertEqual(security._windows_ancestors(target, create=True), target)
+                self.assertEqual(checks[-1], (target, {'private': True, 'directory': True}))
+
+    @unittest.skipUnless(os.name == "nt", "Real Windows concurrent directory creation")
+    def test_windows_create_race_checks_real_private_acl_and_file_type(self):
+        import platform_support as security
+        from platform_smoke import widen_access
+        with private_temporary_directory(Path.home().resolve()) as directory:
+            original_create = security.win32file.CreateDirectory
+            junction_target = directory / 'junction-target'
+            ensure_private_directory(junction_target)
+            for obstruction in (None, 'widened ACL', 'not a directory', 'reparse point'):
+                target = directory / ('raced-' + str(obstruction))
+                def raced_create(path, attributes):
+                    if obstruction == 'not a directory':
+                        descriptor = secure_open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                        os.close(descriptor)
+                    elif obstruction == 'reparse point':
+                        # Directory junctions need no symlink privilege. The
+                        # post-race check must reject the real reparse flag.
+                        subprocess.run(['cmd.exe', '/d', '/c', 'mklink', '/J', path, str(junction_target)],
+                                       check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    else:
+                        original_create(path, attributes)
+                        if obstruction == 'widened ACL':
+                            widen_access(Path(path))
+                    raise security.pywintypes.error(183, 'CreateDirectory', 'Already exists')
+                with self.subTest(obstruction=obstruction), patch.object(security.win32file, 'CreateDirectory', side_effect=raced_create):
+                    if obstruction:
+                        with self.assertRaises(PermissionError):
+                            ensure_private_directory(target)
+                    else:
+                        self.assertEqual(ensure_private_directory(target), target)
+                if obstruction == 'widened ACL':
+                    # Rejection must not repair the foreign grant.
+                    with self.assertRaises(PermissionError):
+                        ensure_private_directory(target)
+
     def test_regular_private_file_and_two_independent_lock_handles(self):
         with private_temporary_directory(Path.home().resolve()) as directory:
             private = directory / "private"

@@ -23,6 +23,13 @@ different editor. An already authorized mixed workflow needs no repeated approva
   short video, sample the opening through its first completed event, not only a
   later climax. Distinguish a weak idea, absent action, repetitive composition and
   poor execution. If creative choice is delegated, explain the decision and act.
+* **The same complaint returns after an edit:** compare the complaint, your
+  earlier explanation and what actually changed. New captions do not test a
+  hypothesis about missing character movement. Revise the explanation and test
+  another supported cause; stop dependent work based on a disproved assumption.
+  Preserve accepted parts and the unresolved issue. Separate local defects do
+  not require restarting the whole direction; distinguish a new request from an
+  unmet earlier requirement.
 * **Images, clips or avatars:** use [generation](generation.md). A portrait,
   talking script-avatar and personal avatar are different deliverables.
 * **A character and a moving object:** read [action and reaction](action-and-reaction.md)

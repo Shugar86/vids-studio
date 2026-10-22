@@ -23,6 +23,7 @@ export async function launchFullChainFixture({count = 10, connectClients = true}
   const temporary = await mkdtemp(join(tmpdir(), 'vids-chain-'));
   await chmod(temporary, 0o700);
   const env = {...process.env, PYTHONUNBUFFERED:'1',
+    XDG_STATE_HOME:join(temporary,'state'),
     VIDS_STUDIO_SOCKET:join(temporary,'bridge.sock'),
     VIDS_STUDIO_FLEET_DIR:join(temporary,'fleet'),
     VIDS_STUDIO_REGISTRY_DIR:join(temporary,'coordinator')};

@@ -9,6 +9,12 @@ the export version, with stable ID, time range, evidence, impact, recheck method
 and status. New timing updates the range without erasing the original concern.
 A repaired caption or clean decode does not close “nothing happens in the opening.”
 
+When a comparison confirms that the final audio is unchanged from an earlier
+reviewed export, retain only the listening evidence that actually existed.
+Previously unperformed listening remains `not_checked`; identical sound does not
+establish synchronization with a new picture. The same voice source on the
+timeline does not prove an unchanged final mix.
+
 ## Review the working material
 
 Inspect each scene and its neighbors for missing content, crop, text, identity,
@@ -17,6 +23,11 @@ For a new take, compare initial state → actual action → result with the scen
 purpose. Reject absent action; an attractive camera move cannot replace it.
 Review the opening through its first completed event early, before scaling up
 expensive generation. A deliberate quiet format can have different criteria.
+
+After changing a transition, inspect newly exposed frames, actual neighboring
+scene boundaries and layers at the cut: overlap may have hidden an earlier defect.
+A sample closes only the question it tested; a storyboard does not establish
+identity in motion or the feasibility of a gesture.
 
 Listen to every new speech take and to new music both separately and in the
 final mix. Check words, extra/missing syllables, clipped edges, pronunciation,

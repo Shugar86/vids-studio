@@ -52,7 +52,7 @@ async function fixture(t, {unknownTrigger = false} = {}) {
       let result, error;
       if (request.sessionId !== sessionId) error = {code: 'SESSION_MISMATCH', message: 'Wrong fixture attachment'};
       else if (request.method === 'status') result = {attached: true, sessionId, documentId,
-        control: {mode: 'write'}, capabilities: ['export_trigger', 'export_download_status']};
+        control: {mode: 'write'}, capabilities: ['export_trigger', 'export_download_status', 'export_preflight']};
       else if (request.controlToken !== args.controlToken) error = {code: 'CONTROL_BUSY', message: 'Fixture requires its own lease', outcome: 'not_performed'};
       else if (request.method === 'renew_control') result = {renewed: true};
       else if (request.method === 'release_control') result = {released: true};
@@ -62,7 +62,8 @@ async function fixture(t, {unknownTrigger = false} = {}) {
       else if (request.method === 'export_trigger') {
         if (unknownTrigger) error = {code: 'BROWSER_TIMEOUT', message: 'Fixture unknown trigger', outcome: 'unknown'};
         else result = {armed: true};
-      } else if (request.method === 'export_download_status') {
+      } else if (request.method === 'export_preflight') result = {sessionId, documentId, exportWatch: null};
+      else if (request.method === 'export_download_status') {
         downloadEntered.resolve(); await downloadRelease.promise;
         result = {jobId: args.jobId, sessionId, documentId,
           ...(unknownTrigger ? {state: 'needs_reconciliation', code: 'EXPORT_WATCH_UNRESOLVED'} :

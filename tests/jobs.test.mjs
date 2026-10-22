@@ -28,7 +28,8 @@ async function fixture(t, overrides={}) {
   const bridge=async (method,args) => {
     calls.push({method,args});
     const supplied=await overrides.bridge?.(method,args,{calls}); if(supplied) return supplied;
-    if(method==='status')return {ok:true,result:{attached:true,sessionId:'session-a',documentId:'document-a',control:{mode:'write'},capabilities:['export_trigger','export_download_status']}};
+    if(method==='status')return {ok:true,result:{attached:true,sessionId:'session-a',documentId:'document-a',control:{mode:'write'},capabilities:['export_trigger','export_download_status','export_preflight']}};
+    if(method==='export_preflight')return {ok:true,result:{sessionId:'session-a',documentId:'document-a',exportWatch:null}};
     if(method==='renew_control')return {ok:true,result:{}};
     if(method==='release_control')return {ok:true,result:{released:true}};
     if(method==='observe'){lastSnapshot=`snapshot-${++snapshot}`;return {ok:true,result:{snapshotId:lastSnapshot,nodes:[{ref:`node-${snapshot}`,role:'menuitem',name:['File','Download d ►','MP4 video (.mp4) d'][menu]}]}};}
@@ -60,6 +61,31 @@ test('stale attestation and reconciliation control cannot trigger an export',asy
   const f=await fixture(t,{bridge:async method=>method==='status'?{ok:true,result:{attached:true,sessionId:'session-a',documentId:'document-a',control:{mode:'reconcile'}}}:null});
   await assert.rejects(f.jobs.start(f.args),e=>e.code==='CONTROL_RECONCILIATION_REQUIRED');
   f.advance(900001);await assert.rejects(f.jobs.start(f.args),e=>e.code==='AUTO_DOWNLOAD_PRECONDITION');assert.equal(f.calls.filter(c=>c.method==='click').length,0);
+});
+test('fresh pending export blocks a new intent before renew, persistence or any menu', async t=>{
+  for(const triggerOutcome of ['pending','performed','unknown']) {
+    const f=await fixture(t,{bridge:async method=>method==='export_preflight'?{ok:true,result:{sessionId:'session-a',documentId:'document-a',
+      exportWatch:{state:'armed',triggerOutcome}}}:null});
+    await assert.rejects(f.jobs.start(f.args),{code:'EXPORT_WATCH_BUSY'});
+    assert.deepEqual(f.calls.map(call=>call.method),['status','export_preflight']);
+    assert.equal(f.jobs.store.get(f.args.jobId),null);
+    assert.equal(f.calls[1].args.controlToken,token);
+  }
+});
+test('missing, malformed, foreign or timed-out fresh export state never falls back to cached status', async t=>{
+  for(const response of [
+    {ok:true,result:{sessionId:'session-a',documentId:'document-a'}},
+    {ok:true,result:{sessionId:'other-session',documentId:'document-a',exportWatch:null}},
+    {ok:true,result:{sessionId:'session-a',documentId:'other-document',exportWatch:null}},
+    {ok:true,result:{sessionId:'session-a',documentId:'document-a',exportWatch:{state:'unknown'}}},
+    {ok:false,error:{code:'TIMEOUT',outcome:'not_performed'}},
+    {ok:false,error:{code:'TRANSPORT_UNKNOWN',outcome:'unknown'}},
+  ]) {
+    const f=await fixture(t,{bridge:async method=>method==='export_preflight'?response:null});
+    await assert.rejects(f.jobs.start(f.args),{code:response.error?.code||'EXPORT_PREFLIGHT_UNVERIFIED'});
+    assert.deepEqual(f.calls.map(call=>call.method),['status','export_preflight']);
+    assert.equal(f.jobs.store.get(f.args.jobId),null);
+  }
 });
 test('foreign job capability cannot inspect, cancel or retrieve owner result',async t=>{
   const f=await fixture(t);const start=await f.jobs.start(f.args);const bad={jobId:start.id,jobToken:'wrong'.repeat(10)};

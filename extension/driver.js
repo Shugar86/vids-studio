@@ -9,12 +9,12 @@ import {createExportWatcher} from "./export-watch.js";
 export const HOST_NAME = PROFILE.nativeHostName;
 export const CAPABILITIES = [
   "observe", "screenshot", "click", "drag", "scroll", "type_text", "press_key", "upload", "upload_via_picker",
-  "export_trigger", "export_download_status",
+  "export_trigger", "export_download_status", "export_preflight",
 ];
 const SNAPSHOT_MAX_AGE_MS = 120000;
 const CDP_TIMEOUT_MS = 10000;
 const SCREENSHOT_READS = new Set(["Page.getLayoutMetrics"]);
-const READ_OPERATIONS = new Set(["observe", "screenshot", "export_download_status"]);
+const READ_OPERATIONS = new Set(["observe", "screenshot", "export_download_status", "export_preflight"]);
 const FILE_CHOOSER_TIMEOUT_MS = 5000;
 const DRAG_STEP_INTERVAL_MS = 20;
 
@@ -1075,7 +1075,12 @@ export function createDriver(chromeApi, options = {}) {
         const target = await requireSession(request.sessionId);
         if (target.pendingInput && !READ_OPERATIONS.has(request.method)) fail("BROWSER_RECOVERING",
           "A timed-out scroll is still pending in Chrome. Observe/status remain available, but no new mutation is allowed until it settles and control is reconciled. Do not replay it.");
-        if (request.method === "observe") result = await observe(target, params);
+        if (request.method === "export_preflight") {
+          // Fresh in-memory state for this attachment only. No CDP, download
+          // search, menu interaction or cached native status is involved.
+          result = {sessionId: target.id, documentId: target.documentId, exportWatch: exports.pending(target.id)};
+        }
+        else if (request.method === "observe") result = await observe(target, params);
         else if (request.method === "screenshot") result = await screenshot(target, params);
         else if (request.method === "export_download_status") result = await exports.status(params.jobId, target.id);
         else if (request.method === "export_trigger") {
@@ -1122,8 +1127,11 @@ export function createDriver(chromeApi, options = {}) {
     // Repeated ids return their prior promise, never repeat an input operation.
     const key = typeof request?.id === "string" ? `${request.sessionId || "status"}:${request.id}` : null;
     if (key && completed.has(key)) return completed.get(key);
-    const promise = requestQueue.then(() => execute(request));
-    requestQueue = promise.then(() => {}, () => {});
+    // This metadata read must not wait behind a stalled screenshot or input.
+    // execute still validates the envelope and the exact live tab binding.
+    const metadataRead = request?.method === "export_preflight";
+    const promise = metadataRead ? execute(request) : requestQueue.then(() => execute(request));
+    if (!metadataRead) requestQueue = promise.then(() => {}, () => {});
     if (key) {
       completed.set(key, promise);
       if (completed.size > 256) completed.delete(completed.keys().next().value);

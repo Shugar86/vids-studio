@@ -124,7 +124,14 @@ def _windows_ancestors(path, *, create=False):
             # A read-only ancestor is safe, but no other principal may create
             # children here and race creation of our protected directory.
             _windows_check(directory.parent, directory=True, owned=False, creating=True)
-            win32file.CreateDirectory(str(directory), _attributes())
+            try:
+                win32file.CreateDirectory(str(directory), _attributes())
+            except pywintypes.error as exc:
+                # Another native worker may create the same protected parent
+                # after our check. Only already-exists is benign, and only
+                # after the same complete private/type/reparse validation.
+                if exc.winerror != 183:  # ERROR_ALREADY_EXISTS
+                    raise
             _windows_check(directory, private=True, directory=True)
     return path
 

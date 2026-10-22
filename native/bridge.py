@@ -30,6 +30,7 @@ EXTENSION_PROTOCOL = PROFILE["extensionProtocol"]
 MAX_REQUEST = 256 * 1024
 MAX_NATIVE = 24 * 1024 * 1024
 TIMEOUT = 20.0
+EXPORT_PREFLIGHT_TIMEOUT = 3.0
 CACHE_TTL = 900.0
 CACHE_LIMIT = 512
 LOCAL_PROTOCOL = PROFILE["protocol"]
@@ -38,7 +39,7 @@ MAX_PENDING = 128
 MUTATIONS = frozenset(("click", "drag", "scroll", "type_text", "press_key", "upload", "upload_via_picker", "export_trigger"))
 CONTROL_METHODS = frozenset(("acquire_control", "renew_control", "release_control", "reconcile_control"))
 FLEET_METHODS = frozenset(("claim_attachment", "binding_status", "resume_binding", "release_binding"))
-METHODS = MUTATIONS | CONTROL_METHODS | FLEET_METHODS | {"status", "diagnostics", "observe", "screenshot", "export_download_status"}
+METHODS = MUTATIONS | CONTROL_METHODS | FLEET_METHODS | {"status", "diagnostics", "observe", "screenshot", "export_download_status", "export_preflight"}
 
 
 DIAG_LIMIT = 64 * 1024
@@ -544,7 +545,10 @@ class Bridge:
                 self.complete(rid, error(code, "Document authority could not be verified before dispatch; inspect diagnostics", unknown=mutating and pending.sent), settled=not pending.sent)
             except (OSError, ValueError):
                 self.complete(rid, error("BRIDGE_WRITE_FAILED", "Native messaging write failed; observe before any further mutation", unknown=mutating and pending.sent), settled=not pending.sent)
-        if not pending.done.wait(self.timeout):
+        # Fresh extension-local export state is cheap and cannot dispatch any
+        # browser input. A missing reply must stop the job before its first menu.
+        timeout = min(self.timeout, EXPORT_PREFLIGHT_TIMEOUT) if method == "export_preflight" else self.timeout
+        if not pending.done.wait(timeout):
             self.complete(pending.request_id, error("TIMEOUT", "No receipt arrived. Observe the document; never automatically repeat an uncertain mutation", unknown=mutating), settled=False)
         with self.lock:
             response = dict(pending.response or error("DISCONNECTED", "Bridge disconnected", unknown=mutating))

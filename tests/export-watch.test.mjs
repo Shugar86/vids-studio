@@ -57,6 +57,26 @@ test('only a definitely untriggered armed watch can be discarded, and waits expi
   const f=fixture();f.watch.arm(f.binding);assert.equal(f.watch.discard('job-1','session-1'),true);f.watch.arm(f.binding);f.watch.markTriggerUnknown('job-1');assert.equal(f.watch.discard('job-1','session-1'),false);f.advance(900001);assert.equal((await f.watch.status('job-1','session-1')).code,'EXPORT_WATCH_EXPIRED');
 });
 
+test('pending export metadata is fresh, session-local and omits job/download capabilities',async()=>{
+  const f=fixture();assert.equal(f.watch.pending('session-1'),null);
+  f.watch.arm(f.binding);f.watch.markTriggerUnknown('job-1');
+  const armed=f.watch.pending('session-1');
+  assert.equal(armed.state,'armed');assert.equal(armed.triggerOutcome,'unknown');
+  assert.deepEqual(Object.keys(armed).sort(),['expiresAt','retryBoundary','state','triggerOutcome']);
+  assert.equal(f.watch.pending('other-session'),null);
+  f.begin();assert.equal(f.watch.pending('session-1').state,'downloading');
+  assert.equal(f.queries.length,0,'Preflight never searches browser download history');
+  f.created(f.item);f.complete();await f.watch.status('job-1','session-1');
+  assert.equal(f.watch.pending('session-1'),null);
+});
+test('accepted trigger cannot discard its watch while waiting for a late download event',async()=>{
+  const f=fixture();f.watch.arm(f.binding);f.watch.markTriggerAccepted('job-1');
+  assert.equal(f.watch.discard('job-1','session-1'),false);
+  assert.throws(()=>f.watch.arm({...f.binding,jobId:'new-job'}),{code:'EXPORT_WATCH_BUSY'});
+  f.begin();f.created(f.item);f.complete();
+  assert.equal((await f.watch.status('job-1','session-1')).state,'completed');
+});
+
 test('real isolated MV3 debugger correlates ordinary HTTP, redirect and blob downloads without behavior overrides',async()=>{
   const {chromium}=await import('playwright');
   const {createServer}=await import('node:http');

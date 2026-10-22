@@ -83,6 +83,39 @@ class FixtureCase(unittest.TestCase):
 
 
 class NativeTests(FixtureCase):
+    def test_export_preflight_requires_control_and_a_fresh_extension_receipt(self):
+        output = CapturedOutput()
+        host = attached_host(stdout=output)
+        denied = host.request(request(method="export_preflight", token="foreign-token"))
+        self.assertEqual(denied["error"]["code"], "CONTROL_BUSY")
+        self.assertEqual(output.messages, [])
+        replies = []
+        worker = threading.Thread(target=lambda: replies.append(host.request(request(method="export_preflight"))))
+        worker.start()
+        self.assertTrue(output.ready.wait(1))
+        self.assertEqual(output.messages[0]["method"], "export_preflight")
+        self.assertFalse(replies, "Local/cached status must not satisfy export preflight")
+        expected = {"sessionId": "session-1", "documentId": "fixture",
+                    "exportWatch": {"state": "armed", "triggerOutcome": "unknown"}}
+        host.receive({"v": bridge.EXTENSION_PROTOCOL, "type": "response", "id": "req-1", "ok": True, "result": expected})
+        worker.join(1)
+        self.assertEqual(replies, [{"ok": True, "result": expected}])
+
+    def test_export_preflight_has_a_short_deadline_and_never_turns_a_late_reply_into_success(self):
+        host = attached_host(timeout=1)
+        with patch.object(bridge, "EXPORT_PREFLIGHT_TIMEOUT", 0.02):
+            started = time.monotonic()
+            response = host.request(request(method="export_preflight"))
+            self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual(response["error"]["code"], "TIMEOUT")
+        self.assertEqual(response["error"]["outcome"], "not_performed")
+        self.assertEqual(host.control.inflight, 1)
+        host.receive({"v": bridge.EXTENSION_PROTOCOL, "type": "response", "id": "req-1", "ok": True,
+                      "result": {"sessionId": "session-1", "documentId": "fixture", "exportWatch": None}})
+        self.assertEqual(host.control.inflight, 0)
+        self.assertEqual(response["error"]["code"], "TIMEOUT")
+        self.assertEqual(host.session_id, "session-1")
+
     def test_diagnostic_log_is_private_bounded_and_redacts_payloads(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "bridge.log"

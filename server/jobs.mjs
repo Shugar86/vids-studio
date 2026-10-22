@@ -38,7 +38,15 @@ export class ExportJobs {
     const status = (await this.call('status', {sessionId: args.sessionId})).result;
     requireValue(status?.attached && status.sessionId === args.sessionId && status.documentId === args.documentId, 'DOCUMENT_CHANGED', 'The current attached document/session does not match the export request.');
     requireValue(status.control?.mode === 'write', 'CONTROL_RECONCILIATION_REQUIRED', 'Export requires a write lease, not a reconciliation lease.');
-    requireValue(status.capabilities?.includes('export_trigger') && status.capabilities?.includes('export_download_status'), 'EXPORT_UNAVAILABLE', 'Reload the compatible extension with download observation before exporting.');
+    requireValue(['export_trigger', 'export_download_status', 'export_preflight'].every(capability => status.capabilities?.includes(capability)), 'EXPORT_UNAVAILABLE', 'Reload the compatible extension with download observation before exporting.');
+    // Fleet status is deliberately cached/local for responsive diagnostics.
+    // Only a fresh, exact-attachment extension response can clear this guard.
+    const preflight = (await this.call('export_preflight', {sessionId: args.sessionId, controlToken: args.controlToken})).result;
+    requireValue(preflight?.sessionId === args.sessionId && preflight.documentId === args.documentId &&
+      Object.hasOwn(preflight, 'exportWatch'), 'EXPORT_PREFLIGHT_UNVERIFIED', 'Fresh export-watch state was not verified for this attachment. No export menu was opened.');
+    requireValue(preflight.exportWatch === null || ['armed', 'downloading'].includes(preflight.exportWatch?.state),
+      'EXPORT_PREFLIGHT_UNVERIFIED', 'The extension did not provide a recognized export-watch state. No export menu was opened.');
+    requireValue(preflight.exportWatch === null, 'EXPORT_WATCH_BUSY', 'This attachment still has a pending export. Reconcile its existing job/download before a new intent; no export menu was opened.');
     await this.call('renew_control', {sessionId: args.sessionId, controlToken: args.controlToken});
     const jobToken = args.jobToken;
     const job = {schemaVersion: 1, id: args.jobId, profileId: this.profile.id, documentId: args.documentId, kind: 'export_mp4', intentId: args.intentId,

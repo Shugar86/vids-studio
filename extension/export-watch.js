@@ -54,6 +54,13 @@ export function createExportWatcher(chromeApi, {now = Date.now} = {}) {
     if (!job || job.sessionId !== sessionId) fault('EXPORT_WATCH_NOT_FOUND', 'No export watch belongs to this session and job.');
     return job;
   }
+  function pending(sessionId) {
+    expire();
+    const job = [...jobs.values()].find(job => job.sessionId === sessionId && ['armed', 'downloading'].includes(job.state));
+    return job ? {state: job.state, triggerOutcome: job.triggerOutcome,
+      expiresAt: new Date(job.started + TTL).toISOString(),
+      retryBoundary: 'reconcile_previous_export_before_new_intent'} : null;
+  }
   function arm(binding) {
     expire();
     if (!chromeApi.downloads?.onCreated || !chromeApi.downloads?.search) fault('EXPORT_UNAVAILABLE', 'The loaded extension does not provide download observation.');
@@ -148,7 +155,7 @@ export function createExportWatcher(chromeApi, {now = Date.now} = {}) {
   }
   function discard(jobId, sessionId) {
     const job = lookup(jobId, sessionId);
-    if (job.state !== 'armed' || job.guid || job.downloadId !== null || job.triggerOutcome === 'unknown') return false;
+    if (job.state !== 'armed' || job.guid || job.downloadId !== null || job.triggerOutcome !== 'pending') return false;
     jobs.delete(jobId);
     return true;
   }
@@ -162,5 +169,5 @@ export function createExportWatcher(chromeApi, {now = Date.now} = {}) {
   }
   const unsubscribe = subscribeDownloads(chromeApi.downloads, {onCreated, onChanged});
   function dispose() { unsubscribe(); jobs.clear(); candidates.clear(); }
-  return {arm, onDebuggerEvent, status, revoke, discard, markTriggerAccepted, markTriggerUnknown, dispose};
+  return {arm, onDebuggerEvent, status, pending, revoke, discard, markTriggerAccepted, markTriggerUnknown, dispose};
 }

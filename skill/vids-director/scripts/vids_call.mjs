@@ -26,7 +26,16 @@ const imageAt = rest.indexOf('--image')
 const imagePath = imageAt >= 0 ? rest[imageAt + 1] : null
 const args = JSON.parse(json === '-' ? readFileSync(0, 'utf8') : json)
 const client = new Client({name: 'vids-director-cli', version: '1'})
-await client.connect(new StdioClientTransport({command: process.execPath, args: [`${bridge}/server/index.mjs`]}))
+// The SDK deliberately inherits only basic OS variables. Preserve the explicit
+// Vids transport/state selection without forwarding unrelated app credentials.
+const environmentKeys = [
+  'VIDS_STUDIO_SOCKET', 'VIDS_STUDIO_FLEET_DIR', 'VIDS_STUDIO_REGISTRY_DIR',
+  'VIDS_STUDIO_MEDIA_BUDGET_DIR', 'VIDS_STUDIO_PYTHON',
+  'VIDS_STUDIO_FFMPEG', 'VIDS_STUDIO_FFPROBE', 'XDG_RUNTIME_DIR', 'XDG_STATE_HOME',
+]
+const env = Object.fromEntries(environmentKeys.filter(key => process.env[key] !== undefined)
+  .map(key => [key, process.env[key]]))
+await client.connect(new StdioClientTransport({command: process.execPath, args: [`${bridge}/server/index.mjs`], env}))
 try {
   const result = await client.callTool({name: tool, arguments: args}, undefined, {timeout: 60000})
   for (const part of result.content || []) {

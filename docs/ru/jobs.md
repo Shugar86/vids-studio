@@ -8,7 +8,7 @@
 
 ## Условия и право на задание
 
-Нужны Node 22.13.0+, `ffprobe` и `ffmpeg`. Расширению требуются разрешение `downloads` и внутренние capabilities `export_trigger` и `export_download_status`. Перед проверкой изменённого build перезагрузите расширение и переподключите клиент.
+Нужны Node 22.13.0+, `ffprobe` и `ffmpeg`. Расширению требуются разрешение `downloads` и внутренние capabilities `export_trigger`, `export_download_status` и `export_preflight`. Перед проверкой изменённого build перезагрузите расширение и переподключите клиент.
 
 До вызова `vids_job_start` создайте и безопасно сохраните UUID `jobId`, UUID `intentId` и случайный 32-байтный base64url `jobToken`. Они сохраняются **до отправки start**, чтобы потеря ответа не лишила доступа. Передайте наблюдаемые `documentId`, `sessionId`, текущий `controlToken` этой задачи и:
 
@@ -21,6 +21,21 @@
 Вызывающий передаёт заданию свою writer lease на время браузерных шагов. Job освобождает её до копирования и анализа локального файла. Обычные status/download observations обновляют активность native lease во время ограниченного ожидания. Чужой capability никогда не получается и не освобождается.
 
 Идентичный повтор start с теми же `jobId` и `jobToken` возвращает существующий status без браузерных вызовов. Изменённые intent/document и второй ID того же intent отвергаются. Status/result/cancel требуют job capability. Сырые job/control capabilities не сохраняются, сохраняются только hashes. Не включайте capabilities в журналы и общие артефакты.
+
+До сохранения нового intent и открытия любого меню runner запрашивает свежее
+`export_preflight` у точной подключённой сессии со своим control token. Внутреннее
+чтение проверяет текущую привязку вкладки и её export watch в памяти: без CDP,
+поиска истории загрузок и ожидания за скриншотом. Native deadline — три секунды.
+Активный `armed`/`downloading` watch даёт `EXPORT_WATCH_BUSY`; timeout, отсутствующее
+поле или несовпадение привязки останавливают start без открытия меню. Быстрые
+локальные `vids_status`/diagnostics не заменяют эту проверку, а поздний ответ не
+возобновляет отклонённый start.
+
+Последний guard при создании watch по-прежнему работает непосредственно перед
+кликом MP4. Watch с отправленным trigger или неизвестным исходом нельзя отбросить
+ради нового экспорта. Истечение watch или отказ от intent не отменяют рендер
+Google, не доказывают провал старого экспорта и не разрешают replay. Новому intent
+всё равно нужны описанная сверка предыдущего исхода и своя свежая проверка.
 
 ## Состояния и свидетельство завершения
 
@@ -71,4 +86,4 @@ Watcher включается до guarded export click. Он привязан к
 
 Store ограничен 500 jobs. Terminal records и закрытые копии удаляются после семи дней при следующем start; unresolved records не удаляются для обхода reservation. Сохраните нужные результаты в другом месте до истечения срока. Явное recovery может завершить unresolved record без выдуманного внешнего исхода.
 
-Команда: `node --test tests/jobs.test.mjs tests/export-watch.test.mjs`. Набор включает реальный MP4 probe/decode, настоящий изолированный MV3 Chromium, обратный порядок событий, redirect/blob, чужой/отсутствующий referrer, неоднозначность/revocation, unknown receipts, lost-response recovery, свежую lease, атомарную межпроцессную отмену, отмену при проверке, небезопасные stores/media, ограниченные ожидания и отсутствие browser replay.
+Команда: `node --test tests/jobs.test.mjs tests/export-watch.test.mjs tests/export-preflight.integration.test.mjs`. Набор включает свежий fleet/MCP preflight с потерянным native-ответом и нулём кликов по меню, реальный MP4 probe/decode, настоящий изолированный MV3 Chromium, обратный порядок событий, redirect/blob, чужой/отсутствующий referrer, неоднозначность/revocation, unknown receipts, lost-response recovery, свежую lease, атомарную межпроцессную отмену, отмену при проверке, небезопасные stores/media, ограниченные ожидания и отсутствие browser replay.

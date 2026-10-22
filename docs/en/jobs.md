@@ -12,8 +12,8 @@ labels, run user-provided JavaScript, or repeat an uncertain click.
 ## Preconditions and capability
 
 Node 22.13.0 or later, `ffprobe`, and `ffmpeg` are required. The extension needs
-`downloads` permission and the internal `export_trigger` and
-`export_download_status` capabilities. Reload the installed extension and
+`downloads` permission and the internal `export_trigger`,
+`export_download_status`, and `export_preflight` capabilities. Reload the installed extension and
 reconnect the client before testing an updated build.
 
 Before `vids_job_start`, generate and securely retain a UUID `jobId`, UUID
@@ -31,6 +31,21 @@ must be at most 15 minutes old and no more than five seconds in the future; the
 driver checks it again immediately before the final click. The recipe never
 changes browser download settings or opens/operates a system picker. Without the
 attestation it stops before browser work. The caller must not invent it.
+
+Before persisting a new intent or opening any menu, the runner requests fresh
+`export_preflight` metadata from the exact attached session using its control
+token. This internal read checks the live tab binding and its in-memory export
+watch without CDP, download-history searches, or waiting behind a screenshot.
+It has a three-second native deadline. An active `armed`/`downloading` watch
+returns `EXPORT_WATCH_BUSY`; timeout, a missing field, or a mismatched attachment
+stops the start without opening menus. Fast local `vids_status`/diagnostics are
+not a substitute, and a late reply cannot resume a rejected start.
+
+The final watch-arm guard still runs immediately before the MP4 click. A watch
+whose trigger was sent or has an unknown outcome cannot be discarded to make
+room for another export. Watch expiry or abandoning a job intent does not cancel
+Google rendering, prove that the old export failed, or authorize a replay. Any
+new intent still requires the documented reconciliation and its own fresh check.
 
 The caller grants the job use of its supplied writer lease through the browser
 steps. The job releases that lease before copying or probing local media. Ordinary
@@ -173,8 +188,9 @@ pruned after seven days on the next start; unresolved records are never evicted
 to bypass a reservation. Retain needed results elsewhere before expiry. Explicit
 recovery can settle an unresolved record without inventing an external outcome.
 
-Run `node --test tests/jobs.test.mjs tests/export-watch.test.mjs`. Tests include
-real small MP4 probe/decode, a real isolated Chromium watcher, reversed download
+Run `node --test tests/jobs.test.mjs tests/export-watch.test.mjs tests/export-preflight.integration.test.mjs`. Tests include
+real small MP4 probe/decode, a real isolated Chromium watcher, fresh fleet/MCP
+preflight with a lost native reply and zero menu clicks, reversed download
 event order, redirects/blob, foreign/missing referrer, ambiguity/revocation,
 unknown receipts, caller-retained lost-response recovery, fresh lease fencing,
 atomic cross-process cancellation, cancellation during verification, unsafe

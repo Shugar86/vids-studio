@@ -10,10 +10,18 @@ and its purpose, what stays recognizable, what changes across scenes, movement
 character/information density, and two concrete approaches that would miss this
 brief. “Modern” is not enough to choose images.
 
-Find the scene where the value becomes visible. Test its entrance, action and
-result. For a dynamic short video, first test the opening through the first
+Choose a representative scene for the unresolved question on which later work
+depends. A storyboard can test composition and sequence; identity in motion,
+action and synchronization need an actual short clip. If both recognizable
+identity and a walking action matter, verify their overlap in one usable range.
+Separate successful portrait and walking samples do not establish that range.
+Frames can reveal defects without proving continuous motion.
+
+Test the entrance, action and result. For a dynamic short video, first test the opening through the first
 completed event: an attractive climax cannot validate an empty opening. A blind
 reviewer should describe what actually changed and why they would keep watching.
+Use the result to continue or revise the specific failed assumption. Approval of
+a prop image does not approve the character's identity or the entire edit.
 A deliberately quiet opening may be appropriate to another brief. Do not repeat
 this entire process for a small caption correction.
 
