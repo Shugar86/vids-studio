@@ -72,11 +72,13 @@ Run this separately for each profile. A successful SDK smoke confirms the transp
 
 The 0.4 implementation has automated coverage of both profiles and isolated browser mechanisms. The public package deliberately excludes private project content, local installation state and historical film screenshots.
 
+<a id="parallel-agent-acceptance"></a>
+
 ### Ten concurrent Codex agents · 22 October 2026
 
 Runtime **0.4.0**, core build `3cd4665363be6207072b6c681c3ce6dd36b48eef1cc7c48ad66011eae460f9ff`: ten actual `codex exec` model processes ran concurrently against ten disposable Chrome pages through separate MCP clients and native hosts. All ten performed and verified their own edit; all eighty tool calls succeeded, controls and bindings were released, and the active cover tab and its input remained unchanged. The run completed at 21:46:47 UTC. Private capabilities and model transcripts are not published.
 
-The full Linux source suite and a freshly materialized Claude profile each passed 212 Node tests and 139 Python tests, with two Windows-only Python tests skipped. Separate integration checks cover a screenshot held past its deadline, targeted detach, cross-document refusal and export continuation after the MCP parent exits.
+After the export-preflight and media-admission fixes, core build `7e9a76edee793fb663030dbde8b742ed683559a68880c2ed14c4d29a47a23c93` passed 219 Node tests in both the full Linux source suite and a freshly materialized Claude profile. Each Python suite ran 148 tests: 145 passed, three Windows-only cases skipped. Integration checks cover a screenshot held past its deadline, targeted detach, cross-document refusal, fresh export state before any menu, and export continuation after the MCP parent exits. This later regression run is separate from the model run above.
 
 These are real model processes operating local fixtures, **not ten completed Google Vids films**. Claude model behavior and live multi-film editing remain separate acceptance steps. Reproduce the optional model run with the command in [parallel sessions](parallel.md).
 

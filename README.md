@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml"><img src="https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml/badge.svg" alt="Verify both profiles"></a>
-  <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/release-v0.3.0%20preview-ffb19e" alt="v0.3.0 preview"></a>
+  <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/release-v0.4.0%20preview-ffb19e" alt="v0.4.0 preview"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-a8e4d0" alt="Windows, macOS and Linux">
 </p>
 
@@ -22,7 +22,7 @@ The skill provides the production method; the connector gives the agent eyes and
 
 ## Several videos, one monitor
 
-The **0.4 development build** supports several explicitly attached documents per client, a private assignment for each chat, adaptive command limits and a shared local monitor for Codex and Claude. Start the monitor with `bun run monitor`; pause one video or the whole group without using the system mouse or keyboard. Export runners survive their MCP client's exit, with separately bounded local MP4 verification.
+The **0.4 preview** supports several explicitly attached documents per client, a private assignment for each chat, adaptive command limits and a shared local monitor for Codex and Claude. Start the monitor with `bun run monitor`; pause new commands for one video or the whole group without using the system mouse or keyboard. This does not pause the model or a Google generation already in progress. Export runners survive their MCP client's exit, with separately bounded local MP4 verification.
 
 [Connect 5–10 chats and understand the limits →](docs/en/parallel.md)
 
@@ -31,7 +31,7 @@ The **0.4 development build** supports several explicitly attached documents per
 <img src="docs/assets/monitor/monitor-desktop-ru.png" alt="Vids Studio shared monitor" width="900">
 </details>
 
-The downloadable 0.3 release below predates these changes. Build the current source for 0.4; live Google Vids acceptance remains separate from isolated browser and real-agent fixture tests.
+The archives below include these changes. Ten parallel `codex exec` processes passed isolated-browser acceptance; live multi-film editing in Google Vids remains a separate check. [What was tested and on which build](docs/en/testing.md#parallel-agent-acceptance).
 
 ## Watch a real edit
 
@@ -93,13 +93,13 @@ Both profiles can work on different documents independently. If they target the 
 
 **Installation: Windows, macOS and Linux (preview).** You need Node.js **22.13+**, Python **3.11+**, Bun, Google Chrome **118+**, your own Codex or Claude Code installation, and access to Google Vids. FFmpeg/ffprobe are needed for export verification and media helpers. The declared minimum versions are not a claim that every combination has been tested. The bridge needs no separate model API key or Google OAuth application.
 
-Choose a client archive from the [v0.3.0 preview release](https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0):
+Choose a client archive from the [v0.4.0 preview release](https://github.com/Shugar86/vids-studio/releases/tag/v0.4.0):
 
 | Codex | Claude Code | Development |
 | --- | --- | --- |
-| [Download Codex ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-codex.zip) | [Download Claude ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-claude.zip) | [Download source ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/vids-studio-0.3.0-source.zip) |
+| [Download Codex ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.4.0/vids-studio-0.4.0-codex.zip) | [Download Claude ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.4.0/vids-studio-0.4.0-claude.zip) | [Download source ZIP](https://github.com/Shugar86/vids-studio/releases/download/v0.4.0/vids-studio-0.4.0-source.zip) |
 
-Check downloads against [SHA256SUMS](https://github.com/Shugar86/vids-studio/releases/download/v0.3.0/SHA256SUMS). Extract the selected profile into a **permanent directory**. Dependencies are installed separately. Open the instructions for your client:
+Check downloads against [SHA256SUMS](https://github.com/Shugar86/vids-studio/releases/download/v0.4.0/SHA256SUMS). Extract the selected profile into a **permanent directory**. Dependencies are installed separately. Open the instructions for your client:
 
 **Windows:** follow the [PowerShell commands](docs/en/platforms.md#windows--powershell) with a dedicated Python environment. The commands below are for Linux/macOS. [Platform details and checks →](docs/en/platforms.md)
 
@@ -189,7 +189,7 @@ For focused edits and take replacement, see [more prompts and the review criteri
 
 The automated checks cover both profiles: installation and packaging, MCP/native communication, document ownership, browser input, uploads, export handling and local helpers. Browser checks run in disposable profiles with local fixtures, separately from a user's real project. [CI runs](https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml) show results for specific revisions.
 
-**v0.3.0 is a preview.** The current Claude v5 demo has file-level verification. Live acceptance of the typed `export_mp4` workflow still requires evidence from the current loaded build. An earlier Codex v4 run produced a verified file but failed to correlate its download; that historical observation is separate from the current film. [Demo and review limits](docs/en/demo.md) · [Earlier export observation](docs/en/testing.md#codex-v4-export) · [Export details](docs/en/jobs.md)
+**v0.4.0 is a preview.** The current Claude v5 demo has file-level verification. Live acceptance of the typed `export_mp4` workflow still requires evidence from the current loaded build. An earlier Codex v4 run produced a verified file but failed to correlate its download; that historical observation is separate from the current film. [Demo and review limits](docs/en/demo.md) · [Earlier export observation](docs/en/testing.md#codex-v4-export) · [Export details](docs/en/jobs.md)
 
 This is an independent, unofficial project. It does not provide a Google Vids scene API, include Google AI access or bypass account restrictions. Google can change its editor; Chrome and the attached document must remain open.
 
