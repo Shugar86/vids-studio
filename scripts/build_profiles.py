@@ -29,7 +29,10 @@ PUBLIC_DOC_FILES = ('docs/profile-install.md', 'docs/jobs.md', 'docs/runtime-saf
                     'site/index.html', 'site/ru/index.html', 'site/style.css',
                     'site/assets/sasha-and-the-lamp.jpg',
                     'site/assets/sasha-and-the-lamp-v4.mp4',
-                    'site/assets/sasha-and-the-lamp.en.vtt')
+                    'site/assets/sasha-and-the-lamp.en.vtt',
+                    'site/assets/sasha-and-the-lamp-v5.mp4',
+                    'site/assets/sasha-and-the-lamp-v5.jpg',
+                    'site/assets/sasha-and-the-lamp-v5.en.vtt')
 PUBLIC_DIRECTORIES = {'docs/en': {'.md'}, 'docs/ru': {'.md'}}
 SOURCE_METADATA = ('AGENTS.md', 'CLAUDE.md')
 SOURCE_DIRECTORIES = {'.github/workflows': {'.yml', '.yaml'},

@@ -23,14 +23,14 @@ The skill provides the production method; the connector gives the agent eyes and
 ## Watch a real edit
 
 <p align="center">
-  <a href="https://shugar86.github.io/vids-studio/"><img src="https://shugar86.github.io/vids-studio/assets/sasha-and-the-lamp.jpg" alt="Watch Sasha and the lamp, a 46-second portrait video edited in Google Vids" width="270"></a>
+  <a href="https://shugar86.github.io/vids-studio/"><img src="https://shugar86.github.io/vids-studio/assets/sasha-and-the-lamp-v5.jpg" alt="Watch Sasha and the lamp v5, a 45.5-second portrait video edited in Google Vids" width="270"></a>
 </p>
 
-**Sasha and the lamp · dynamic opening v4.** A Russian-language short, edited in Google Vids using the Codex profile on Linux. The opening now moves from a close-up of the lamp through its turn to Sasha's reaction. The voice and music remain unchanged.
+**Sasha and the lamp · Claude v5.** The creator’s preferred cut: a Russian-language short assembled in Google Vids with Claude Code. The lamp turns away while Sasha stays in the shot. This version cleans up duplicate captions, adjusts the cuts to the spoken words and replaces the final lamp movement.
 
-[**Play the 46-second demo**](https://shugar86.github.io/vids-studio/) · [What changed and what was checked](docs/en/demo.md) · [Download MP4 · 5.5 MB](https://shugar86.github.io/vids-studio/assets/sasha-and-the-lamp-v4.mp4)
+[**Play the 45.5-second demo**](https://shugar86.github.io/vids-studio/) · [What changed and what was checked](docs/en/demo.md) · [Download MP4 · 8 MB](https://shugar86.github.io/vids-studio/assets/sasha-and-the-lamp-v5.mp4)
 
-The exported file was independently checked. Automatic download correlation still needs work; this demo does not establish acceptance of the complete `export_mp4` job.
+The published MP4 was checked, including full decoding and preservation of picture and sound when removing the extra subtitle track. Live acceptance of the complete automated `export_mp4` workflow remains a separate requirement.
 
 ## What you can do
 
@@ -176,7 +176,7 @@ For focused edits and take replacement, see [more prompts and the review criteri
 
 The automated checks cover both profiles: installation and packaging, MCP/native communication, document ownership, browser input, uploads, export handling and local helpers. Browser checks run in disposable profiles with local fixtures, separately from a user's real project. [CI runs](https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml) show results for specific revisions.
 
-**v0.3.0 is a preview.** A real Google Vids MP4 was obtained and independently checked on Linux with the Codex profile. In that run, the typed `export_mp4` job did not confirm the download: it stopped for reconciliation, then was closed without repeating the export. The loaded runtime version was not recorded, so this is not live acceptance of v0.3.0 or the other client/platform combinations. [Demo and review limits](docs/en/demo.md) · [Export details](docs/en/jobs.md) · [Verification boundaries](docs/en/testing.md)
+**v0.3.0 is a preview.** The current Claude v5 demo has file-level verification. Live acceptance of the typed `export_mp4` workflow still requires evidence from the current loaded build. An earlier Codex v4 run produced a verified file but failed to correlate its download; that historical observation is separate from the current film. [Demo and review limits](docs/en/demo.md) · [Earlier export observation](docs/en/testing.md#codex-v4-export) · [Export details](docs/en/jobs.md)
 
 This is an independent, unofficial project. It does not provide a Google Vids scene API, include Google AI access or bypass account restrictions. Google can change its editor; Chrome and the attached document must remain open.
 
