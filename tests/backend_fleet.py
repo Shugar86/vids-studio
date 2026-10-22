@@ -193,17 +193,89 @@ class FleetTests(unittest.TestCase):
         self.fleet.control({"action": "resume", "sessionId": host.session_id})
         self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 2)
 
-    def test_real_measurements_drive_admission_without_invented_gpu_or_cpu(self):
-        session, _, _ = self.register()
+    def test_limit_one_reserves_its_only_slot_for_ordinary_commands(self):
+        host, _, _ = self.host()
+        session = host.session_id
         self.fleet.control({"action": "set_limits", "maxConcurrency": 1})
-        self.fleet.admit(session, "first", "screenshot")
-        with self.assertRaises(CoordinationError) as denied:
-            self.fleet.admit(session, "second", "observe")
-        self.assertEqual(denied.exception.code, "FLEET_BUSY")
-        self.fleet.diagnostic(session, "read_quarantined", "Page.startScreencast")
-        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 1)
-        self.fleet.diagnostic(session, "read_resolved", "Page.startScreencast")
+        for method in ("screenshot", "upload", "upload_via_picker", "export_trigger"):
+            with self.subTest(method=method), self.assertRaises(CoordinationError) as denied:
+                self.fleet.admit(session, "heavy-" + method, method)
+            self.assertEqual(denied.exception.code, "FLEET_BUSY")
         self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 0)
+        self.fleet.admit(session, "first", "observe")
+        with self.assertRaises(CoordinationError) as denied:
+            self.fleet.admit(session, "second", "click")
+        self.assertEqual(denied.exception.code, "FLEET_BUSY")
+        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 1)
+        self.assertTrue(host.request(self.request(host, "status"))["ok"])
+        self.fleet.settle(session, "first", method="observe")
+        self.fleet.admit(session, "second", "click")
+        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 1)
+        self.fleet.settle(session, "second", method="click")
+        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 0)
+
+    def test_quarantined_capture_leaves_capacity_for_another_document(self):
+        capture, _, _ = self.register(profile="codex")
+        other, _, _ = self.register(profile="claude")
+        self.assertEqual(self.fleet.snapshot()["policy"]["effectiveConcurrency"], 2)
+        self.fleet.admit(capture, "held-capture", "screenshot")
+        self.fleet.diagnostic(capture, "read_quarantined", "Page.startScreencast")
+        self.fleet.settle(capture, "held-capture", method="screenshot", code="BROWSER_TIMEOUT", sent=True)
+        with self.assertRaises(CoordinationError) as denied:
+            self.fleet.admit(other, "second-capture", "screenshot")
+        self.assertEqual(denied.exception.code, "FLEET_BUSY")
+        for method in ("observe", "click"):
+            self.fleet.admit(other, method, method)
+            self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 2)
+            self.fleet.settle(other, method, method=method)
+            self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 1)
+        self.fleet.diagnostic(capture, "read_resolved", "Page.startScreencast")
+        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 0)
+
+    def test_mixed_heavy_classes_cannot_consume_the_reserved_browser_slot(self):
+        first, _, _ = self.register()
+        other, _, _ = self.register(profile="claude")
+        for initial in ("screenshot", "upload", "export_trigger"):
+            with self.subTest(initial=initial):
+                self.fleet.admit(first, "first", initial)
+                for method in ("screenshot", "upload", "upload_via_picker", "export_trigger"):
+                    with self.assertRaises(CoordinationError) as denied:
+                        self.fleet.admit(other, "next-" + method, method)
+                    self.assertEqual(denied.exception.code, "FLEET_BUSY")
+                self.fleet.admit(other, "observe", "observe")
+                self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 2)
+                self.fleet.settle(other, "observe", method="observe")
+                self.fleet.settle(first, "first", method=initial)
+        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 0)
+
+    def test_limit_downshift_preserves_old_permits_and_never_bypasses_pressure(self):
+        first, _, instance = self.register()
+        second, _, _ = self.register()
+        other, _, _ = self.register()
+        now = time.time()
+        self.fleet.clock = lambda: now + 11
+        self.fleet.heartbeat(first, instance)
+        self.assertEqual(self.fleet.snapshot()["policy"]["effectiveConcurrency"], 3)
+        self.fleet.admit(first, "capture-one", "screenshot")
+        self.fleet.admit(second, "capture-two", "screenshot")
+        for session in (first, second):
+            self.fleet.diagnostic(session, "read_quarantined", "Page.startScreencast")
+        self.fleet.resources.values["memoryAvailableBytes"] = 128 * 1024**2
+        self.fleet.heartbeat(first, instance)
+        snapshot = self.fleet.snapshot()
+        self.assertEqual(snapshot["policy"]["effectiveConcurrency"], 1)
+        self.assertEqual(snapshot["policy"]["adaptationReason"], "memory_pressure")
+        self.assertEqual(snapshot["summary"]["pending"], 2)
+        with self.assertRaises(CoordinationError) as denied:
+            self.fleet.admit(other, "reserved-observe", "observe")
+        self.assertEqual(denied.exception.code, "FLEET_BUSY")
+        self.fleet.diagnostic(first, "read_resolved", "Page.startScreencast")
+        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 1)
+        with self.assertRaises(CoordinationError):
+            self.fleet.admit(other, "still-full", "observe")
+        self.fleet.diagnostic(second, "read_resolved", "Page.startScreencast")
+        self.fleet.admit(other, "now-available", "observe")
+        self.assertEqual(self.fleet.snapshot()["summary"]["pending"], 1)
 
     def test_adaptive_governor_ramps_slowly_and_reduces_without_fake_telemetry(self):
         policy = {"maxConcurrency": 10, "paused": False}

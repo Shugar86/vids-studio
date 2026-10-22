@@ -18,7 +18,7 @@ jobs:
   verify:
     name: Node ${{ matrix.node }} · Codex + Claude
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -59,7 +59,9 @@ jobs:
         run: |
           bunx playwright install --with-deps chromium
       - name: Install media test tools
-        timeout-minutes: 5
+        # Hosted runners can need over five minutes for the ~63 MB dependency
+        # set even while downloads continue; keep network timeouts bounded.
+        timeout-minutes: 12
         run: |
           # Playwright's --with-deps has already refreshed the package index.
           sudo apt-get install -y --no-install-recommends ffmpeg

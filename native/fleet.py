@@ -310,9 +310,15 @@ class FleetRegistry:
             total = db.execute("SELECT COUNT(*) FROM permits").fetchone()[0]
             same = db.execute("SELECT COUNT(*) FROM permits WHERE session=?", (session,)).fetchone()[0]
             heavy = db.execute("SELECT COUNT(*) FROM permits WHERE class=?", (category,)).fetchone()[0]
+            combined_heavy = db.execute("SELECT COUNT(*) FROM permits WHERE class IN ('screenshot','export')").fetchone()[0]
             own_capture = category == "screenshot" and db.execute("SELECT 1 FROM permits WHERE session=? AND class='screenshot'", (session,)).fetchone()
             class_limit = min(limit, 3 if category == "screenshot" else 2 if category == "export" else limit)
-            if total >= limit or same >= 2 or heavy >= class_limit or own_capture:
+            # Heavy work must leave one shared slot for ordinary observations
+            # and input, including at conservative startup capacity. At limit
+            # one, new heavy work waits. Existing permits are never discarded
+            # or bypassed when pressure lowers the limit below current usage.
+            reserve_occupied = category in ("screenshot", "export") and combined_heavy >= max(0, limit - 1)
+            if total >= limit or same >= 2 or heavy >= class_limit or own_capture or reserve_occupied:
                 raise CoordinationError("FLEET_BUSY", "Shared browser capacity is occupied; no command was dispatched")
             db.execute("INSERT INTO permits VALUES (?,?,?,?)", (session, request, category, self.clock()))
             db.execute("UPDATE sessions SET last_action=?,requests=requests+1 WHERE session=?", (method, session))

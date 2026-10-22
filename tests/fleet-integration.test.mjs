@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,randomBytes} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {launchFullChainFixture} from './fleet-chain-fixture.mjs';
 
+const execute=promisify(execFile);
 const parse = response => JSON.parse(response.content.find(item=>item.type==='text').text);
 const errorCode = response => parse(response).error?.code;
 const success = response => {
@@ -64,13 +68,30 @@ test('ten independent MCP clients own ten real extension tabs; cross-binding and
       operation_id:randomUUID()})));
     clicks.forEach(success);
     assert.deepEqual(await Promise.all(f.pages.map(page=>page.locator('output').textContent())),Array.from({length:10},(_,i)=>`edited ${i}`));
+    // Configure a real two-slot budget through the same CLI as the monitor.
+    // One heavy permit must leave the other slot for ordinary browser work.
+    const python=chain.env.VIDS_STUDIO_PYTHON||(process.platform==='win32'?'python':'python3');
+    const policy=JSON.parse((await execute(python,[fileURLToPath(new URL('../native/fleet.py',import.meta.url)),
+      'policy','--max-concurrency','2','--json'],{env:chain.env})).stdout);
+    assert.equal(policy.ok,true);assert.equal(policy.result.policy.effectiveConcurrency,2);
+    await f.worker.evaluate(()=>{
+      globalThis.fixtureCaptureDispatches={};
+      for(const port of fixturePorts)port.receivers.push(message=>{
+        if(message.type==='request'&&message.method==='screenshot')
+          fixtureCaptureDispatches[message.sessionId]=(fixtureCaptureDispatches[message.sessionId]||0)+1;
+      });
+    });
+    const captures=index=>f.worker.evaluate(sessionId=>fixtureCaptureDispatches[sessionId]||0,sessions[index].sessionId);
     await f.holdCapture(0);
     const held=call(0,'screenshot',{...controlled(0),format:'jpeg',quality:35});
-    await f.waitCaptureHeld();
+    await Promise.race([f.waitCaptureHeld(),held.then(response=>{throw new Error(`Held capture ended before dispatch: ${errorCode(response)||'unexpected success'}`)})]);
+    assert.equal(await captures(0),1);
     const otherReads=await Promise.all(sessions.slice(1).map((_,i)=>admitted(i+1,'observe',controlled(i+1))));
     otherReads.forEach(success);
-    const shot=await admitted(1,'screenshot',{...controlled(1),format:'jpeg',quality:35});
-    success(shot);assert.ok(shot.content.some(item=>item.type==='image'&&item.data.length>100));
+    const blocked=await call(1,'screenshot',{...controlled(1),format:'jpeg',quality:35});
+    assert.equal(errorCode(blocked),'FLEET_BUSY');
+    assert.equal(parse(blocked).error.outcome,'not_performed');
+    assert.equal(await captures(1),0,'Reserved ordinary slot must not dispatch a second heavy command');
     const timeout=await held;
     assert.equal(errorCode(timeout),'BROWSER_TIMEOUT');
     const pending=success(await call(0,'list_sessions'));
@@ -79,6 +100,9 @@ test('ten independent MCP clients own ten real extension tabs; cross-binding and
     assert.equal(pending.sessions.find(session=>session.sessionId===sessions[0].sessionId).recovery.phase,'read_quarantined');
     const afterTimeout=await Promise.all(sessions.slice(1).map((_,i)=>admitted(i+1,'observe',controlled(i+1))));
     afterTimeout.forEach(success);
+    const stillBlocked=await call(1,'screenshot',{...controlled(1),format:'jpeg',quality:35});
+    assert.equal(errorCode(stillBlocked),'FLEET_BUSY');assert.equal(parse(stillBlocked).error.outcome,'not_performed');
+    assert.equal(await captures(1),0,'A timeout must not manufacture free heavy capacity');
     await f.releaseCapture();
     let resolved=false;
     for(let attempt=0;attempt<100;attempt++){
@@ -86,6 +110,9 @@ test('ten independent MCP clients own ten real extension tabs; cross-binding and
       if(state.pending===0&&!state.recovery){resolved=true;break}await delay(20);
     }
     assert.ok(resolved,'Original held read must settle before disconnect');
+    const shot=await admitted(1,'screenshot',{...controlled(1),format:'jpeg',quality:35});
+    success(shot);assert.ok(shot.content.some(item=>item.type==='image'&&item.mimeType==='image/jpeg'&&item.data.length>100));
+    assert.equal(await captures(1),1,'A new capture is admitted after the original heavy permit settles');
     await f.worker.evaluate(sessionId=>fixtureFleet.detach(sessionId),sessions[0].sessionId);
     const remaining=await Promise.all(sessions.slice(1).map((_,i)=>admitted(i+1,'observe',controlled(i+1))));
     remaining.forEach(success);

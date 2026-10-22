@@ -30,6 +30,8 @@ The panel listens only on loopback, validates Host/Origin and protects requests 
 
 The person sets an upper bound; the shared governor determines current admission from measurements. Capture, upload/export and ordinary commands have separate limits within the overall budget. An unknown outcome retains its slot until confirmed settlement or fencing. This can reduce available concurrency; releasing it on a timer would invent free capacity.
 
+One slot is reserved for ordinary browser commands: captures and uploads/exports together may occupy at most the current limit minus one. At a limit of one, new heavy work waits. If resource pressure lowers the limit below already occupied capacity, new commands wait too; the governor neither erases unresolved work nor exceeds the budget to invent a reserve. Status and diagnostics remain available.
+
 Linux measures CPU, available memory and memory pressure: admission starts at two commands, ramps up gradually with headroom and decreases quickly under pressure. Unsupported Windows/macOS counters remain unknown; admission currently falls back to two browser commands and one local decode. The governor does not close existing tabs or stop other chats, so it cannot guarantee prevention of every OOM or shared GPU-process failure.
 
 Local MP4 verification uses a separate, conservatively bounded queue covering copying, ffprobe and FFmpeg. A slot is released after the actual child process exits. A crash leaves an unsettled marker; neither its age nor a PID authorizes automatic deletion.
