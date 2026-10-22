@@ -25,7 +25,11 @@ PUBLIC_ROOT_FILES = ('README.md', 'README.ru.md', 'LICENSE', 'LICENSE.md',
 PUBLIC_DOC_FILES = ('docs/profile-install.md', 'docs/jobs.md', 'docs/runtime-safety.md',
                     'docs/VERIFICATION.md', 'VERIFICATION.md', 'docs/assets/hero.svg',
                     'docs/assets/workflow.svg', 'docs/assets/extension-popup.en.png',
-                    'docs/assets/extension-popup.ru.png')
+                    'docs/assets/extension-popup.ru.png',
+                    'site/index.html', 'site/ru/index.html', 'site/style.css',
+                    'site/assets/sasha-and-the-lamp.jpg',
+                    'site/assets/sasha-and-the-lamp-v4.mp4',
+                    'site/assets/sasha-and-the-lamp.en.vtt')
 PUBLIC_DIRECTORIES = {'docs/en': {'.md'}, 'docs/ru': {'.md'}}
 SOURCE_METADATA = ('AGENTS.md', 'CLAUDE.md')
 SOURCE_DIRECTORIES = {'.github/workflows': {'.yml', '.yaml'},

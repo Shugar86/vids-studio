@@ -12,3 +12,6 @@ coverage/
 *.webm
 *.sqlite*
 *.sock
+
+# Explicitly approved public demo; other production videos remain ignored.
+!/site/assets/sasha-and-the-lamp-v4.mp4

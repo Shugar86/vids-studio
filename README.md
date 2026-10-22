@@ -12,13 +12,25 @@
   <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-a8e4d0" alt="Windows, macOS and Linux">
 </p>
 
-<p align="center"><a href="#start-here">Install</a> · <a href="#what-you-can-do">Use cases</a> · <a href="#how-it-works">How it works</a> · <a href="docs/en/usage.md">Guide</a> · <a href="https://github.com/Shugar86/vids-studio/releases/tag/v0.3.0">Downloads</a></p>
+<p align="center"><a href="https://shugar86.github.io/vids-studio/">Watch the demo</a> · <a href="#start-here">Install</a> · <a href="#what-you-can-do">Use cases</a> · <a href="#how-it-works">How it works</a> · <a href="docs/en/usage.md">Guide</a></p>
 
 ## Your video, still in the editor
 
 Vids Studio connects Codex or Claude Code to **the Google Vids document you choose**. Describe the audience, idea and desired result. The agent uses a creative skill to plan the video, observes the editor, makes changes and checks what happened. You keep an editable Vids project that you can continue working on yourself.
 
 The skill provides the production method; the connector gives the agent eyes and hands inside the attached tab. Together they support work on story, shots, voice, captions, pacing and sound—using the features available in your Vids account. The bridge uses no system mouse, keyboard or clipboard, so it does not take over your desktop.
+
+## Watch a real edit
+
+<p align="center">
+  <a href="https://shugar86.github.io/vids-studio/"><img src="https://shugar86.github.io/vids-studio/assets/sasha-and-the-lamp.jpg" alt="Watch Sasha and the lamp, a 46-second portrait video edited in Google Vids" width="270"></a>
+</p>
+
+**Sasha and the lamp · dynamic opening v4.** A Russian-language short, edited in Google Vids using the Codex profile on Linux. The opening now moves from a close-up of the lamp through its turn to Sasha's reaction. The voice and music remain unchanged.
+
+[**Play the 46-second demo**](https://shugar86.github.io/vids-studio/) · [What changed and what was checked](docs/en/demo.md) · [Download MP4 · 5.5 MB](https://shugar86.github.io/vids-studio/assets/sasha-and-the-lamp-v4.mp4)
+
+The exported file was independently checked. Automatic download correlation still needs work; this demo does not establish acceptance of the complete `export_mp4` job.
 
 ## What you can do
 
@@ -164,7 +176,7 @@ For focused edits and take replacement, see [more prompts and the review criteri
 
 The automated checks cover both profiles: installation and packaging, MCP/native communication, document ownership, browser input, uploads, export handling and local helpers. Browser checks run in disposable profiles with local fixtures, separately from a user's real project. [CI runs](https://github.com/Shugar86/vids-studio/actions/workflows/ci.yml) show results for specific revisions.
 
-**v0.3.0 is a preview.** The typed `export_mp4` job is implemented and tested in isolated browser conditions; acceptance against the current live Google Vids export is still pending. Unsupported download attribution stops for reconciliation. A valid MP4 also does not establish that the voice, motion or storytelling were reviewed. [Export details](docs/en/jobs.md) · [Verification boundaries](docs/en/testing.md)
+**v0.3.0 is a preview.** A real Google Vids MP4 was obtained and independently checked on Linux with the Codex profile. In that run, the typed `export_mp4` job did not confirm the download: it stopped for reconciliation, then was closed without repeating the export. The loaded runtime version was not recorded, so this is not live acceptance of v0.3.0 or the other client/platform combinations. [Demo and review limits](docs/en/demo.md) · [Export details](docs/en/jobs.md) · [Verification boundaries](docs/en/testing.md)
 
 This is an independent, unofficial project. It does not provide a Google Vids scene API, include Google AI access or bypass account restrictions. Google can change its editor; Chrome and the attached document must remain open.
 
@@ -172,6 +184,7 @@ This is an independent, unofficial project. It does not provide a Google Vids sc
 
 | Documentation | Русский |
 | --- | --- |
+| [Demo: Sasha and the lamp](docs/en/demo.md) | [Деморолик: Саша и лампа](docs/ru/demo.md) |
 | [Installation, updates and rollback](docs/en/installation.md) | [Установка, обновление и откат](docs/ru/installation.md) |
 | [Creative workflow and tools](docs/en/usage.md) | [Творческий процесс и инструменты](docs/ru/usage.md) |
 | [Architecture and permissions](docs/en/architecture.md) | [Архитектура и разрешения](docs/ru/architecture.md) |

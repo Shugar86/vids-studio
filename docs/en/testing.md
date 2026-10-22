@@ -69,6 +69,14 @@ Run this separately for each profile. A successful SDK smoke confirms the transp
 
 The 0.3 implementation has automated coverage of both profiles and isolated browser mechanisms. The public package deliberately excludes private project content, local installation state and historical film screenshots.
 
+### Real export observation · 22 October 2026
+
+The public [Sasha and the lamp demo](demo.md) was exported from Google Vids on Linux using the Codex profile. The MP4 was obtained and independently verified, including decoded frames, stream preservation and subtitle timing. Publication of this specific demo is authorized; private editor links and raw logs are excluded.
+
+The typed job triggered export once, and the editor reported that the video had exported. The watcher nevertheless remained `armed`, with no accepted download GUID or ID. The job reached `needs_reconciliation` with `EXPORT_WAIT_EXPIRED`, then was cancelled without repeating the export. The file's content was verified separately; its name and modification time were not treated as proof of browser-event correlation.
+
+**Artifact verification passed; automatic download correlation did not pass acceptance.** The loaded runtime version is absent from the retained evidence. This observation therefore cannot be attributed to the v0.3.0 build or generalized to Claude Code, Windows or macOS. Frame inspection and technical audio comparisons also do not establish fresh real-time playback or listening; see the [demo review limits](demo.md#review-limits).
+
 The following still require explicit live verification with the **current loaded build**:
 
 - The typed `export_mp4` recipe against an actual Google Vids export, including its document referrer and download-event behavior.

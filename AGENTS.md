@@ -22,6 +22,7 @@ Vids Studio связывает Codex или Claude Code с одной явно �
 | `skill/vids-director/` | Обёртка Claude, его дополнительные локальные helpers и assets; сборщик добавляет общий корпус |
 | `scripts/build_profiles.py`, `scripts/setup.py`, `scripts/build_release.py` | Сборка профилей, установка/rollback конфигурации, релизные архивы |
 | `tests/`, `.github/workflows/ci.yml` | Изолированные проверки и CI обоих профилей |
+| `site/` | Публичная RU/EN-страница демо; только одобренный ролик и статические файлы, публикация через `pages.yml` |
 | `README.md`, `README.ru.md`, `docs/en/`, `docs/ru/` | Публичные инструкции с одинаковым смыслом на двух языках |
 
 `profile.json`, `extension/profile.js` и `build-manifest.json` генерируются сборщиком. Не правьте их вручную. Общие изменения навыка вносите в `skill/google-vids`; копия внутри Claude-профиля не становится новым источником. Новые публичные файлы должны попасть в явные allowlist сборщика, чтобы ссылки работали и в ZIP.
@@ -32,7 +33,7 @@ Vids Studio связывает Codex или Claude Code с одной явно �
 - Сохраняйте привязку к профилю, сессии и документу, свежесть snapshots, проверку capabilities и общее владение документом. Используйте собственный control token; не обходите `CONTROL_BUSY`.
 - Не повторяйте мутацию с неизвестным исходом. Смерть процесса или истечение таймера не доказывают fencing. Восстановление требует предусмотренной протоколом проверки и новых полномочий управления.
 - Не ослабляйте guards или assertions ради зелёного теста. Проверки браузера запускаются с временными профилями и локальными фикстурами; живой Chrome пользователя не является тестовым стендом.
-- Не публикуйте секреты, конфигурацию пользователя, rollback-записи, runtime stores, логи, реальные document IDs, персональные медиа или browser profiles. Генерируемые метаданные не должны содержать абсолютные пути разработчика.
+- Не публикуйте секреты, конфигурацию пользователя, rollback-записи, runtime stores, логи, реальные document IDs или browser profiles. Персональные медиа требуют явного разрешения; для публичного ролика в `site/assets/` оно получено, но не распространяется на другие материалы. Генерируемые метаданные не должны содержать абсолютные пути разработчика.
 
 ### Проверка по характеру изменения
 
@@ -67,6 +68,7 @@ Read the affected code and relevant [guides](docs/en/architecture.md) first. Edi
 | `skill/vids-director/` | Claude wrapper, additional local helpers and assets; the builder adds the shared corpus |
 | `scripts/build_profiles.py`, `scripts/setup.py`, `scripts/build_release.py` | Profile materialization, configuration install/rollback and release archives |
 | `tests/`, `.github/workflows/ci.yml` | Isolated checks and CI for both profiles |
+| `site/` | Public EN/RU demo page; only the approved film and static files, published through `pages.yml` |
 | `README.md`, `README.ru.md`, `docs/en/`, `docs/ru/` | Public instructions with equivalent meaning in both languages |
 
 The builder generates `profile.json`, `extension/profile.js` and `build-manifest.json`; do not edit them manually. Change shared skill content in `skill/google-vids`; a copy in a Claude profile is not another source of truth. Add new public files to the builder's explicit allowlists so links also work in ZIP distributions.
@@ -77,7 +79,7 @@ The builder generates `profile.json`, `extension/profile.js` and `build-manifest
 - Preserve profile/session/document binding, fresh snapshots, capability checks and shared document ownership. Use your own control token; do not bypass `CONTROL_BUSY`.
 - Never replay a mutation with an unknown outcome. Process death or a timer is not proof of fencing. Recovery requires protocol-defined reconciliation and fresh control authority.
 - Never weaken guards or assertions to pass a check. Browser tests use disposable profiles and local fixtures; the user's live Chrome is not a test environment.
-- Never publish credentials, user configuration, rollback records, runtime stores, logs, real document IDs, personal media or browser profiles. Generated metadata must not contain developer-specific absolute paths.
+- Never publish credentials, user configuration, rollback records, runtime stores, logs, real document IDs or browser profiles. Personal media requires explicit authorization; the public demo in `site/assets/` has it, but that does not authorize other media. Generated metadata must not contain developer-specific absolute paths.
 
 ### Match verification to the change
 
