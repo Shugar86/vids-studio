@@ -13,7 +13,7 @@ export const CAPABILITIES = [
 ];
 const SNAPSHOT_MAX_AGE_MS = 120000;
 const CDP_TIMEOUT_MS = 10000;
-const SCREENSHOT_READS = new Set(["Page.getLayoutMetrics", "Page.captureScreenshot"]);
+const SCREENSHOT_READS = new Set(["Page.getLayoutMetrics"]);
 const READ_OPERATIONS = new Set(["observe", "screenshot", "export_download_status"]);
 const FILE_CHOOSER_TIMEOUT_MS = 5000;
 const DRAG_STEP_INTERVAL_MS = 20;
@@ -44,7 +44,7 @@ export function createDriver(chromeApi) {
         timeoutMs: CDP_TIMEOUT_MS, blocks: session.pendingRead ? ["mutations", "screenshot"] : ["mutations"],
         requiresReconciliation: true, requiresFreshObservation: true,
       } : session?.pendingRead ? {
-        state: "screenshot_read_pending", method: session.pendingRead.method,
+        state: session.pendingRead.cleanupFailed ? "screenshot_cleanup_failed" : "screenshot_read_pending", method: session.pendingRead.method,
         elapsedMs: Math.max(0, Date.now() - session.pendingRead.started),
         timeoutMs: CDP_TIMEOUT_MS, blocks: ["screenshot"],
         requiresFreshObservation: !session.snapshot,
@@ -76,6 +76,8 @@ export function createDriver(chromeApi) {
   }
 
   function requireScreenshotReady(target) {
+    if (target.pendingRead?.cleanupFailed) fail("BROWSER_RECOVERING",
+      "Chrome did not confirm screenshot stream cleanup. The tab remains attached and observe is available, but new screenshots are blocked. Reconnect this extension during a pause before another screenshot.");
     if (target.pendingRead) fail("BROWSER_RECOVERING",
       "The previous screenshot read is still pending in Chrome. Use observe for a fresh snapshot; check status/control for any unresolved mutation before editing. The tab remains attached. No new screenshot was sent.");
   }
@@ -84,8 +86,13 @@ export function createDriver(chromeApi) {
     ensureCurrent(target);
     const recoverable = screenshotRead && SCREENSHOT_READS.has(method);
     if (recoverable) requireScreenshotReady(target);
-    const read = {method, started: Date.now()};
+    const started = Date.now();
     const command = chromeApi.debugger.sendCommand({tabId: target.tabId}, method, params);
+    return commandWithDeadline(target, method, command, recoverable, started);
+  }
+
+  async function commandWithDeadline(target, method, command, recoverable, started, cancelRead) {
+    const read = {method, started};
     const settled = phase => {
       if (session !== target || target.pendingRead !== read) return;
       target.pendingRead = null;
@@ -108,6 +115,7 @@ export function createDriver(chromeApi) {
               invalidate(target);
               target.pendingRead = read;
               diagnostic(target, "read_quarantined", method, read.started);
+              cancelRead?.(error);
               // This read cannot dispatch input or publish a late snapshot.
               // Keep its slot until it actually settles so repeated screenshots
               // cannot pile up, but do not revoke the session or block AX/input.
@@ -190,6 +198,7 @@ export function createDriver(chromeApi) {
     if (!old) return status();
     old.pendingRead = null;
     old.pendingInput = null;
+    old.capture?.cancel(Object.assign(new Error("The screenshot session ended."), {code: "NOT_ATTACHED"}));
     exports.revoke(old.id);
     old.fileChooser?.cancel("NOT_ATTACHED", "The attached session ended while waiting for a file chooser.");
     invalidate(old);
@@ -244,6 +253,11 @@ export function createDriver(chromeApi) {
       session = target;
       lastError = null;
       await cdp(target, "Page.enable");
+      // Keep this target's renderer producing frames while its tab/window is
+      // hidden. Chromium's focus emulation retains a visible capturer without
+      // activating a tab or OS window; debugger detach releases that override.
+      // Screenshot and wheel dispatch both depend on compositor progress.
+      await cdp(target, "Emulation.setFocusEmulationEnabled", {enabled: true});
       // Cancel file inputs in this attached CDP target, including late handlers.
       // OOPIF targets are not covered; picker uploads reject those before input.
       await cdp(target, "Page.setInterceptFileChooserDialog", {enabled: true, cancel: true});
@@ -602,16 +616,83 @@ export function createDriver(chromeApi) {
     };
   }
 
+  async function captureFrame(target, params) {
+    ensureCurrent(target);
+    requireScreenshotReady(target);
+    const started = Date.now();
+    const send = (method, params = {}) => Promise.resolve().then(() => {
+      ensureCurrent(target);
+      return chromeApi.debugger.sendCommand({tabId: target.tabId}, method, params);
+    });
+    let resolveFrame, rejectFrame;
+    const frame = new Promise((resolve, reject) => { resolveFrame = resolve; rejectFrame = reject; });
+    // The start ACK can be delayed past a cancellation. Observe the rejection
+    // immediately, even while the command still waits for that ACK.
+    frame.catch(() => {});
+    const capture = {
+      started, done: false, frameId: null, acknowledgements: [],
+      cancel(error) { if (!capture.done) { capture.done = true; rejectFrame(error); } },
+      accept(event) {
+        if (session !== target || target.capture !== capture || capture.done) return;
+        if (!Number.isInteger(event.sessionId)) return;
+        const timestamp = event.metadata?.timestamp;
+        // Chromium can finish encoding an older stream's frame using the new
+        // stream id. Require capture time as well as our session/epoch guards.
+        if (!Number.isFinite(timestamp) || timestamp * 1000 < started) {
+          const ack = send("Page.screencastFrameAck", {sessionId: event.sessionId});
+          ack.catch(error => capture.cancel(error));
+          capture.acknowledgements.push(ack);
+          return;
+        }
+        capture.done = true;
+        capture.frameId = event.sessionId;
+        resolveFrame({data: event.data});
+      },
+    };
+    target.capture = capture;
+    const command = (async () => {
+      try {
+        await send("Page.startScreencast", {
+          ...params, everyNthFrame: 1, maxFramesInFlight: 1, sendLastFrame: false,
+        });
+        ensureCurrent(target);
+        return await frame;
+      } finally {
+        capture.done = true;
+        if (session === target && target.capture === capture) {
+          try {
+            // Queue stop immediately after ACK, without waiting for the ACK.
+            // A stalled response must not leave a recording stream running.
+            if (capture.frameId !== null) {
+              capture.acknowledgements.push(send("Page.screencastFrameAck", {sessionId: capture.frameId}));
+            }
+            const stop = send("Page.stopScreencast");
+            const results = await Promise.allSettled([...capture.acknowledgements, stop]);
+            if (results.at(-1).status === "rejected" && session === target) {
+              invalidate(target);
+              target.pendingRead = {method: "Page.stopScreencast", started, cleanupFailed: true};
+              diagnostic(target, "read_cleanup_failed", "Page.stopScreencast", started);
+            }
+            const failure = results.find(result => result.status === "rejected");
+            if (failure) throw failure.reason;
+          } finally {
+            if (target.capture === capture) target.capture = null;
+          }
+        }
+      }
+    })();
+    return commandWithDeadline(target, "Page.startScreencast", command, true, started, error => capture.cancel(error));
+  }
+
   async function screenshot(target, params) {
     const format = params.format ?? "png";
     if (!["png", "jpeg"].includes(format)) fail("INVALID_ARGUMENT", "format must be png or jpeg.");
     const quality = params.quality === undefined ? undefined : integer(params.quality, "quality", 1, 100);
     const epoch = target.epoch;
     const bounds = await viewport(target, true);
-    const {data} = await cdp(target, "Page.captureScreenshot", {
+    const {data} = await captureFrame(target, {
       format, ...(format === "jpeg" && quality !== undefined ? {quality} : {}),
-      captureBeyondViewport: false, fromSurface: true,
-    }, true);
+    });
     const binary = Uint8Array.from(atob(data), value => value.charCodeAt(0));
     const bitmap = await createImageBitmap(new Blob([binary], {type: `image/${format}`}));
     const image = {
@@ -1040,6 +1121,7 @@ export function createDriver(chromeApi) {
     const target = session;
     if (!target || source.tabId !== target.tabId || source.sessionId) return;
     exports.onDebuggerEvent(source, method, params);
+    if (method === "Page.screencastFrame") target.capture?.accept(params);
     if (method === "Page.fileChooserOpened") target.fileChooser?.receive(params);
     if (method === "DOM.documentUpdated" || method === "Page.frameResized") invalidate(target);
     if (method === "Page.frameNavigated" && !params.frame?.parentId) {

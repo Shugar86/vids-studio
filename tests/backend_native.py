@@ -97,6 +97,12 @@ class NativeTests(FixtureCase):
             self.assertTrue(rows)
             self.assertTrue(all(row["phase"] == "read_quarantined" for row in rows))
             self.assertTrue(all(set(row) == {"t", "pid", "event", "phase", "method", "elapsedMs"} for row in rows))
+            log.write("cdp", phase="read_cleanup_failed", method="Page.stopScreencast", elapsedMs=10001,
+                      params={"data": "private pixels"})
+            cleanup = json.loads(path.read_text().splitlines()[-1])
+            self.assertEqual(cleanup["phase"], "read_cleanup_failed")
+            self.assertEqual(cleanup["method"], "Page.stopScreencast")
+            self.assertNotIn("params", cleanup)
             log.write("cdp", phase={}, method="/private/path", elapsedMs=-1)
             log.write({}, reason={})
             self.assertEqual(json.loads(path.read_text().splitlines()[-1])["event"], "cdp")

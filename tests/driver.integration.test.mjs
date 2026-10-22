@@ -58,6 +58,7 @@ before(async () => {
     })},
   }
   driver = createDriver(api)
+  cdp.on('Page.screencastFrame', params => driver.onDebuggerEvent({tabId: 1}, 'Page.screencastFrame', params))
   await driver.attach(await tab())
   sessionId = (await driver.status()).sessionId
   temporary = await mkdtemp(join(tmpdir(), 'vids-driver-fixture-'))

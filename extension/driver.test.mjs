@@ -87,6 +87,23 @@ function holdNextCommand(f, command, matches = () => true) {
   return {sent, acknowledge, reject};
 }
 
+function screencastFrame(f, {sessionId = 1, timestamp = Date.now() / 1000, data = "ZnJlc2g=", source} = {}) {
+  f.driver.onDebuggerEvent(source ?? {tabId: f.tab.id}, "Page.screencastFrame", {
+    sessionId, data, metadata: {timestamp, deviceWidth: 800, deviceHeight: 600, pageScaleFactor: 1},
+  });
+}
+
+function screenshotBitmap(context) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "createImageBitmap");
+  const decode = context.mock.fn(async () => ({width: 1600, height: 1200, close() {}}));
+  Object.defineProperty(globalThis, "createImageBitmap", {configurable: true, writable: true, value: decode});
+  context.after(() => {
+    if (previous) Object.defineProperty(globalThis, "createImageBitmap", previous);
+    else delete globalThis.createImageBitmap;
+  });
+  return decode;
+}
+
 function persistentStorage(f) {
   const data = {};
   f.api.storage = {local: {
@@ -160,6 +177,37 @@ test("missing durable storage rejects attachment before any debugger command", a
   await assert.rejects(f.driver.attach(f.tab), {code: 'STORAGE_REQUIRED'});
   assert.equal(f.calls.length, 0);
   assert.equal(f.nativeMessages.length, 0);
+});
+
+test("attachment waits for background rendering before advertising the session", async () => {
+  const f = fixture();
+  const pending = holdNextCommand(f, 'Emulation.setFocusEmulationEnabled');
+  const attaching = f.driver.attach(f.tab);
+  await pending.sent;
+  assert.deepEqual(f.calls.find(([method]) => method === 'Emulation.setFocusEmulationEnabled'),
+    ['Emulation.setFocusEmulationEnabled', {enabled: true}]);
+  assert.equal(f.nativeMessages.length, 0, 'the bridge must not advertise an unprepared renderer');
+  pending.acknowledge({});
+  await attaching;
+  assert.equal(f.nativeMessages[0].type, 'hello');
+  assert.equal(f.driver.status().attached, true);
+  await f.driver.detach();
+});
+
+test("unsupported background rendering fails attachment and detaches before native connection", async () => {
+  const f = fixture();
+  const stored = persistentStorage(f);
+  const original = f.api.debugger.sendCommand;
+  f.api.debugger.sendCommand = async (target, method, params) => {
+    if (method === 'Emulation.setFocusEmulationEnabled') throw new Error('Focus emulation unavailable');
+    return original(target, method, params);
+  };
+  await assert.rejects(f.driver.attach(f.tab), /Focus emulation unavailable/);
+  assert.equal(f.driver.status().attached, false);
+  assert.equal(f.calls.filter(([method]) => method === 'detach').length, 1);
+  assert.equal(f.nativeMessages.length, 0);
+  assert.equal(stored.vidsStudioActiveBindingV1, undefined);
+  assert.equal(f.calls.some(([method]) => method.startsWith('Input.')), false);
 });
 
 test("concurrent attachment cannot pass an awaited detach; explicit disconnect cancels the waiting generation", async () => {
@@ -474,13 +522,183 @@ test("a stalled CDP command expires, revokes attachment and frees the request qu
   assert.equal((await f.request("status")).result.attached, false);
 });
 
+test("one-shot screenshot ignores old or foreign frames and returns only fresh pixels with CSS scale", async context => {
+  const f = fixture();
+  const decode = screenshotBitmap(context);
+  await f.driver.attach(f.tab);
+  const pending = f.request("screenshot", {format: "jpeg", quality: 45});
+  await new Promise(setImmediate);
+  assert.equal(f.calls.filter(([method]) => method === "Page.startScreencast").length, 1);
+  const start = f.calls.find(([method]) => method === "Page.startScreencast")[1];
+  assert.equal(start.format, "jpeg");
+  assert.equal(start.quality, 45);
+  screencastFrame(f, {sessionId: 20, source: {tabId: f.tab.id + 1}});
+  screencastFrame(f, {sessionId: 21, source: {tabId: f.tab.id, sessionId: "foreign-frame"}});
+  screencastFrame(f, {sessionId: 22, timestamp: Date.now() / 1000 - 60, data: "b2xk"});
+  screencastFrame(f, {sessionId: 23, timestamp: null, data: "b2xk"});
+  await new Promise(setImmediate);
+  assert.equal(decode.mock.calls.length, 0, "old and undated pixels must not become evidence");
+  assert.deepEqual(f.calls.filter(([method]) => method === "Page.screencastFrameAck").map(([, params]) => params.sessionId), [22, 23],
+    "stale frames from this stream must be acknowledged so fresh frames can arrive");
+  assert.equal(f.calls.some(([method]) => method === "Page.stopScreencast"), false);
+  screencastFrame(f, {sessionId: 24});
+  const response = await pending;
+  assert.equal(response.ok, true, JSON.stringify(response.error));
+  assert.equal(response.result.data, "ZnJlc2g=");
+  assert.equal(response.result.mimeType, "image/jpeg");
+  assert.deepEqual(response.result.image, {width: 1600, height: 1200, scaleX: 2, scaleY: 2});
+  assert.equal(response.result.coordinateSpace, "css-viewport");
+  assert.ok(response.result.snapshotId);
+  assert.equal(decode.mock.calls.length, 1);
+  assert.equal(f.calls.filter(([method]) => method === "Page.stopScreencast").length, 1);
+  assert.deepEqual(f.calls.filter(([method]) => method === "Page.screencastFrameAck").map(([, params]) => params.sessionId), [22, 23, 24]);
+  const calls = f.calls.length;
+  screencastFrame(f, {sessionId: 25});
+  await new Promise(setImmediate);
+  assert.equal(f.calls.length, calls, "a frame after stream cleanup must not dispatch an ACK");
+  assert.equal(f.calls.some(([method]) => method === "Page.captureScreenshot"), false);
+});
+
+test("screenshot ACK and stop are queued together; a held cleanup blocks only new screenshots", async context => {
+  const f = fixture();
+  const decode = screenshotBitmap(context);
+  await f.driver.attach(f.tab);
+  const sessionId = f.driver.status().sessionId;
+  const ack = holdNextCommand(f, "Page.screencastFrameAck");
+  const stop = holdNextCommand(f, "Page.stopScreencast");
+  context.mock.timers.enable({apis: ["setTimeout"]});
+  const pending = f.request("screenshot");
+  await new Promise(setImmediate);
+  screencastFrame(f);
+  await ack.sent;
+  await new Promise(setImmediate);
+  assert.equal(f.calls.filter(([method]) => method === "Page.stopScreencast").length, 1,
+    "stop must not wait for a possibly stalled frame ACK");
+  context.mock.timers.tick(10000);
+  assert.equal((await pending).error.code, "BROWSER_TIMEOUT");
+  context.mock.timers.tick(30000);
+  assert.equal(f.driver.status().attached, true);
+  assert.equal(f.driver.status().sessionId, sessionId);
+  assert.equal(f.driver.status().recovery.method, "Page.startScreencast");
+  const calls = f.calls.length;
+  assert.equal((await f.request("screenshot")).error.code, "BROWSER_RECOVERING");
+  assert.equal(f.calls.length, calls);
+  ack.acknowledge({});
+  await new Promise(setImmediate);
+  assert.equal(f.driver.status().recovery.state, "screenshot_read_pending", "the stop command still owns the capture slot");
+  const observed = (await f.request("observe")).result.snapshotId;
+  stop.acknowledge({});
+  await new Promise(setImmediate);
+  assert.equal(f.driver.status().recovery, null);
+  assert.equal(decode.mock.calls.length, 0, "a timed-out capture must never decode or publish its late pixels");
+  assert.equal((await f.request("click", {snapshotId: observed, x: 20, y: 20})).ok, true);
+  assert.equal(f.calls.some(([method]) => method === "detach"), false);
+});
+
+test("a missing screencast frame times out, stops its stream and permits a later fresh capture", async context => {
+  const f = fixture();
+  const decode = screenshotBitmap(context);
+  await f.driver.attach(f.tab);
+  const stop = holdNextCommand(f, "Page.stopScreencast");
+  context.mock.timers.enable({apis: ["setTimeout"]});
+  const pending = f.request("screenshot");
+  await new Promise(setImmediate);
+  context.mock.timers.tick(10000);
+  assert.equal((await pending).error.code, "BROWSER_TIMEOUT");
+  await stop.sent;
+  assert.equal((await f.request("screenshot")).error.code, "BROWSER_RECOVERING");
+  assert.equal(f.calls.some(([method]) => method === "Page.screencastFrameAck"), false, "never invent a frame ACK");
+  screencastFrame(f, {sessionId: 51});
+  await new Promise(setImmediate);
+  assert.equal(decode.mock.calls.length, 0);
+  stop.acknowledge({});
+  await new Promise(setImmediate);
+  assert.equal(f.driver.status().recovery, null);
+  const next = f.request("screenshot");
+  await new Promise(setImmediate);
+  screencastFrame(f, {sessionId: 52});
+  assert.equal((await next).ok, true);
+  assert.equal(decode.mock.calls.length, 1);
+  assert.equal(f.calls.filter(([method]) => method === "Page.startScreencast").length, 2);
+  assert.equal(f.calls.some(([method]) => method === "detach"), false);
+});
+
+for (const method of ["Page.screencastFrameAck", "Page.stopScreencast"]) {
+  test(`late ${method} rejection never publishes timed-out pixels or detaches the session`, async context => {
+    const f = fixture();
+    const decode = screenshotBitmap(context);
+    await f.driver.attach(f.tab);
+    const command = holdNextCommand(f, method);
+    const sessionId = f.driver.status().sessionId;
+    context.mock.timers.enable({apis: ["setTimeout"]});
+    const pending = f.request("screenshot");
+    await new Promise(setImmediate);
+    screencastFrame(f);
+    await command.sent;
+    context.mock.timers.tick(10000);
+    assert.equal((await pending).error.code, "BROWSER_TIMEOUT");
+    command.reject(new Error("private cleanup failure must not enter diagnostics"));
+    await new Promise(setImmediate);
+    assert.equal(f.driver.status().attached, true);
+    assert.equal(f.driver.status().sessionId, sessionId);
+    assert.equal(decode.mock.calls.length, 0);
+    assert.equal(JSON.stringify(f.nativeMessages).includes("private cleanup failure"), false);
+    if (method === "Page.stopScreencast") {
+      assert.equal(f.driver.status().recovery.state, "screenshot_cleanup_failed");
+      assert.equal(f.driver.status().recovery.method, "Page.stopScreencast");
+      assert.deepEqual(f.driver.status().recovery.blocks, ["screenshot"]);
+      const calls = f.calls.length;
+      assert.equal((await f.request("screenshot")).error.code, "BROWSER_RECOVERING");
+      assert.equal(f.calls.length, calls, "unconfirmed stop cannot permit a second recording stream");
+      context.mock.timers.tick(60000);
+      assert.equal(f.driver.status().recovery.state, "screenshot_cleanup_failed");
+    } else {
+      assert.equal(f.driver.status().recovery, null, "successful stop releases the screenshot slot despite a failed ACK");
+    }
+    const observed = (await f.request("observe")).result.snapshotId;
+    assert.equal((await f.request("click", {snapshotId: observed, x: 20, y: 20})).ok, true);
+    assert.equal(f.calls.some(([name]) => name === "detach"), false);
+  });
+}
+
+test("detaching while waiting for a screencast frame cancels the capture without sending more CDP", async context => {
+  const f = fixture();
+  const decode = screenshotBitmap(context);
+  await f.driver.attach(f.tab);
+  const pending = f.request("screenshot");
+  await new Promise(setImmediate);
+  await f.driver.detach();
+  assert.equal((await pending).error.code, "NOT_ATTACHED");
+  const calls = f.calls.length;
+  screencastFrame(f);
+  await new Promise(setImmediate);
+  assert.equal(f.calls.length, calls);
+  assert.equal(decode.mock.calls.length, 0);
+  assert.equal(f.calls.some(([method]) => ["Page.stopScreencast", "Page.screencastFrameAck"].includes(method)), false,
+    "debugger detach performs cleanup; revoked capture callbacks cannot send new commands");
+});
+
+test("document invalidation during a screencast cannot publish a current snapshot", async context => {
+  const f = fixture();
+  screenshotBitmap(context);
+  await f.driver.attach(f.tab);
+  const pending = f.request("screenshot");
+  await new Promise(setImmediate);
+  f.driver.onDebuggerEvent({tabId: f.tab.id}, "DOM.documentUpdated");
+  screencastFrame(f);
+  const result = await pending;
+  assert.equal(result.error.code, "STALE_CAPTURE");
+  assert.equal(f.driver.status().attached, true);
+  assert.equal(f.calls.filter(([method]) => method === "Page.stopScreencast").length, 1);
+});
+
 test("a screenshot held beyond the old hard deadline preserves attachment and fresh actions", async context => {
   const f = fixture();
   const stored = persistentStorage(f);
   await f.driver.attach(f.tab);
   const sessionId = f.driver.status().sessionId;
   const snapshotId = (await f.request("observe")).result.snapshotId;
-  const command = holdNextCommand(f, "Page.captureScreenshot");
+  const command = holdNextCommand(f, "Page.startScreencast");
   const decode = context.mock.method(globalThis, "atob");
   context.mock.timers.enable({apis: ["setTimeout"]});
   const pending = f.request("screenshot", {format: "jpeg", quality: 45});
@@ -504,7 +722,7 @@ test("a screenshot held beyond the old hard deadline preserves attachment and fr
     assert.equal(repeated.error.code, "BROWSER_RECOVERING");
     assert.equal(repeated.error.outcome, undefined);
   }
-  assert.equal(f.calls.filter(([method]) => method === "Page.captureScreenshot").length, 1,
+  assert.equal(f.calls.filter(([method]) => method === "Page.startScreencast").length, 1,
     "an unresolved capture must not accumulate more browser captures");
   assert.equal((await f.request("click", {snapshotId, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
   const usable = (await f.request("observe")).result.snapshotId;
@@ -520,7 +738,7 @@ test("a screenshot held beyond the old hard deadline preserves attachment and fr
   assert.equal(f.calls.some(([method]) => method === "detach"), false);
 });
 
-for (const method of ["Page.captureScreenshot", "Page.getLayoutMetrics"]) {
+for (const method of ["Page.startScreencast", "Page.getLayoutMetrics"]) {
   for (const completion of ["resolve", "reject"]) {
     test(`screenshot recovery: ${method} late ${completion} blocks only screenshots and preserves fresh actions`, async context => {
       const f = fixture();
@@ -562,14 +780,16 @@ for (const method of ["Page.captureScreenshot", "Page.getLayoutMetrics"]) {
       await new Promise(setImmediate);
       assert.equal(f.driver.status().sessionId, sessionId);
       assert.equal(f.driver.status().recovery, null);
-      assert.equal(f.calls.length, beforeLateReply, "late reply must not continue the old screenshot");
+      const cleanup = f.calls.slice(beforeLateReply);
+      assert.deepEqual(cleanup.map(([name]) => name), method === "Page.startScreencast"
+        ? ["Page.stopScreencast"] : [], "a late start may only clean up its own stream");
       assert.equal(decode.mock.calls.length, 0);
       assert.equal((await f.request("click", {snapshotId, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
       assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true);
       assert.equal(f.calls.filter(([name]) => name === "detach").length, 0);
       assert.equal(JSON.stringify(f.nativeMessages).includes("private failure text"), false);
       const phases = f.nativeMessages.filter(m => m.type === "diagnostic").map(m => m.phase);
-      assert.deepEqual(phases, ["read_quarantined", `read_${completion === "resolve" ? "resolved" : "rejected"}`]);
+      assert.deepEqual(phases, ["read_quarantined", `read_${method === "Page.getLayoutMetrics" && completion === "resolve" ? "resolved" : "rejected"}`]);
     });
     test(`screenshot recovery: old ${method} late ${completion} cannot clear a new session's pending read`, async context => {
       const f = fixture();
@@ -622,7 +842,7 @@ for (const change of ["navigation", "native_disconnect"]) {
   test(`screenshot recovery: ${change} revokes authority before a late read callback`, async context => {
     const f = fixture();
     await f.driver.attach(f.tab);
-    const command = holdNextCommand(f, "Page.captureScreenshot");
+    const command = holdNextCommand(f, "Page.startScreencast");
     context.mock.timers.enable({apis: ["setTimeout"]});
     const pending = f.request("screenshot");
     await command.sent;
@@ -665,7 +885,7 @@ test("mixed pending screenshot and wheel report both gates and settle independen
   const f = fixture();
   await f.driver.attach(f.tab);
   const sessionId = f.driver.status().sessionId;
-  const capture = holdNextCommand(f, "Page.captureScreenshot");
+  const capture = holdNextCommand(f, "Page.startScreencast");
   const decode = context.mock.method(globalThis, "atob");
   context.mock.timers.enable({apis: ["setTimeout"]});
   const screenshot = f.request("screenshot");
@@ -704,7 +924,7 @@ test("mixed pending screenshot and wheel report both gates and settle independen
   assert.equal((await f.request("click", {snapshotId: beforeSettlement, x: 20, y: 20})).error.code, "STALE_SNAPSHOT");
   const fresh = (await f.request("observe")).result.snapshotId;
   assert.equal((await f.request("click", {snapshotId: fresh, x: 20, y: 20})).ok, true);
-  assert.equal(f.calls.filter(([method]) => method === "Page.captureScreenshot").length, 1);
+  assert.equal(f.calls.filter(([method]) => method === "Page.startScreencast").length, 1);
   assert.equal(f.calls.filter(([method, params]) => method === "Input.dispatchMouseEvent" && params.type === "mouseWheel").length, 1);
   assert.equal(f.calls.some(([method]) => method === "detach"), false);
 });

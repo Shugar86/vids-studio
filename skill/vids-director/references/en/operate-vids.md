@@ -59,6 +59,8 @@ rewrite an original `unknown`. An error on a later screenshot does not establish
 the cause of the earlier disconnection. Isolating a timed-out screenshot read never authorizes
 mutation replay.
 
+A screenshot now takes one frame through `Page.startScreencast`, acknowledges it and immediately stops the stream. This avoids `Page.captureScreenshot` stalling on a static background page. Session, snapshot epoch and frame timestamp are checked; a late frame from an older capture cannot become a new observation. PNG/JPEG, quality and CSS scaling remain supported. The stream is not a concurrent fallback over a stuck capture.
+
 After `BROWSER_TIMEOUT` from `vids_screenshot`, inspect `vids_status`. The updated
 behavior is identified by `recovery.state: screenshot_read_pending`,
 `blocks: ["screenshot"]` and `timeoutMs: 10000`. The read times out after ten
@@ -68,8 +70,7 @@ its evidence for supported actions. While the original read remains pending,
 another screenshot returns `BROWSER_RECOVERING` without sending another capture.
 Do not poll screenshot in a loop. The late result is discarded and cannot replace
 a newer snapshot. Once the read settles, `recovery` becomes `null` and another
-screenshot can be requested. Normal lease expiry, navigation and real disconnects
-still require their respective recovery steps.
+screenshot can be requested. If Chrome does not confirm stream cleanup (`screenshot_cleanup_failed`), new screenshots remain blocked until explicit reconnection during a pause; observation remains available. Normal lease expiry, navigation and real disconnects still require their respective recovery steps.
 
 Do not apply this behavior to an older build reporting `waiting_for_read`: it
 blocks observation, screenshots and input, waits up to ten more seconds, then
@@ -79,11 +80,14 @@ new control after a detach. A missing `recovery` field does not establish suppor
 for the new implementation. Check the loaded version/build; updating source files
 alone does not reload the extension.
 
-A hidden or occluded Chrome window may not supply a frame; a timeout alone does
-not establish the cause. The bridge never foregrounds the window or uses system
-input. Background AX operations do not guarantee background screenshots. If the
-next edit requires visual evidence, keep it pending rather than act on old pixels
-or a guess.
+On explicit attachment, the updated driver keeps the selected target rendering
+through CDP focus emulation. It reports page visibility/focus without activating
+the tab or OS window or using system input; debugger detach removes the override.
+This does not focus a particular text field or establish a caret. A hidden or
+occluded window may still fail to supply a frame for other reasons; a timeout
+alone does not establish its cause. If the next edit requires visual evidence,
+keep it pending rather than act on old pixels or a guess. A failed screenshot
+does not authorize reading a leftover image from an earlier request.
 
 `BROWSER_TIMEOUT` from `vids_scroll` is a separate case. In the updated build,
 a pending `Input.dispatchMouseEvent` preserves attachment but status reports

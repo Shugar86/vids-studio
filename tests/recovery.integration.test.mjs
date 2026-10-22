@@ -4,7 +4,7 @@ import test from 'node:test'
 import {chromium} from 'playwright'
 import {createDriver} from '../extension/driver.js'
 
-test('a screenshot ACK held beyond the old deadline preserves the session and fresh editing', async context => {
+test('a screenshot start ACK held beyond the old deadline preserves the session and fresh editing', async context => {
   // Disposable headless browser, local HTML, no Google network or user profile.
   const browser = await chromium.launch({headless: true})
   let driver
@@ -33,9 +33,9 @@ test('a screenshot ACK held beyond the old deadline preserves the session and fr
         sendCommand: async (_target, method, params) => {
           methods.push(method)
           if (method.startsWith('Input.')) inputCount++
-          if (method === 'Page.captureScreenshot') captureCount++
+          if (method === 'Page.startScreencast') captureCount++
           const result = await cdp.send(method, params)
-          if (method === 'Page.captureScreenshot' && !held) {
+          if (method === 'Page.startScreencast' && !held) {
             held = true
             notify()
             await ack
@@ -43,6 +43,7 @@ test('a screenshot ACK held beyond the old deadline preserves the session and fr
           return result
         }},
     })
+    cdp.on('Page.screencastFrame', params => driver.onDebuggerEvent({tabId: tab.id}, 'Page.screencastFrame', params))
     await driver.attach(tab)
     const sessionId = driver.status().sessionId
     let id = 0
@@ -89,7 +90,9 @@ test('a screenshot ACK held beyond the old deadline preserves the session and fr
     assert.ok(editedButton)
     // A late screenshot response must not invalidate the newer AX snapshot.
     release()
-    await new Promise(setImmediate)
+    for (let attempt = 0; attempt < 100 && driver.status().recovery; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
     assert.equal(driver.status().recovery, null)
     assert.equal(driver.status().sessionId, sessionId)
     assert.equal((await request('click', {snapshotId: edited.snapshotId, nodeRef: editedButton.ref})).ok, true)

@@ -12,7 +12,7 @@ Start with `vids_diagnostics` and `vids_status`. They do not attach tabs, take c
 | `RECONNECT_REQUIRED` | Finish active work, reload the extension card, reconnect the intended tab and refresh MCP. Compare MCP/host/extension profile/version/build fields. Rebuilding files alone is insufficient. |
 | `CONTROL_BUSY` | Another task owns this document. Let that task release its lease. Do not borrow its token, delete state, or use another profile to bypass ownership. |
 | `STALE_SNAPSHOT` or stale session | Get current status, establish your own valid control and obtain a fresh observation. Do not reuse coordinates or tokens from an earlier attachment. |
-| `BROWSER_RECOVERING` | Read `status.recovery.state`. `screenshot_read_pending` blocks another screenshot; `input_ack_pending` blocks mutations while an earlier scroll may still execute. AX/status remain available in these new modes. Obtain fresh evidence and follow the distinct recovery paths below. Older `waiting_for_read` blocks all browser operations. |
+| `BROWSER_RECOVERING` | Read `status.recovery.state`. `screenshot_read_pending` blocks another screenshot; `input_ack_pending` blocks mutations while an earlier scroll may still execute. AX/status remain available in these new modes. Obtain fresh evidence and follow the distinct recovery paths below. `screenshot_cleanup_failed` requires explicit reconnection during a pause because Chrome did not confirm stream cleanup. Older `waiting_for_read` blocks all browser operations. |
 | `BROWSER_TIMEOUT` after a mutation | The outcome may be unknown. Inspect the receipt and document; do not repeat the click/type/upload merely because the response timed out. |
 | `mode: reconcile` | Inspect the current document, then supply meaningful evidence to `vids_reconcile_control`. Keep the original unknown outcome recorded; this is not permission to replay it. |
 | Export job needs reconciliation | Check [jobs](jobs.md): unsupported UI labels, referrer, session or ambiguous download evidence stop safely. Do not switch to guessing the latest MP4. |
@@ -32,6 +32,10 @@ An extension **reload**, tab **reconnect** and MCP **refresh** solve different p
 For shared-document coordination, update **both** profiles. A still-running 0.1 host does not honor the 0.2 coordinator. Do not interrupt another task's active generation merely to refresh a file.
 
 ## A screenshot timeout preserves the attachment
+
+On explicit attachment, the driver enables `Emulation.setFocusEmulationEnabled` only for the selected tab. Chromium keeps that target rendering and reports page visibility/focus even while the user works in another tab or window. It does not switch the active tab or OS focus. Both screenshots and wheel dispatch can wait for compositor frames, so both need this behavior. Chromium removes the override when the debugger detaches. This does not select a text field: still verify the intended element and caret before typing.
+
+A screenshot now takes one frame through `Page.startScreencast`, acknowledges it and immediately stops the stream. This avoids `Page.captureScreenshot` stalling on a static background page. Session, snapshot epoch and frame timestamp are checked; a late frame from an older capture cannot become a new observation. PNG/JPEG, quality and CSS scaling remain supported. The stream is not a concurrent fallback over a stuck capture.
 
 In the updated driver, a screenshot read that does not answer within ten seconds returns `BROWSER_TIMEOUT`. This timeout does not detach the tab or revoke the task's control. Status reports `recovery.state: screenshot_read_pending`, `blocks: ["screenshot"]` and `timeoutMs: 10000`. There is no second deadline that detaches the tab. Normal control expiry, document changes and real disconnects still apply.
 

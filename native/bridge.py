@@ -40,7 +40,7 @@ METHODS = MUTATIONS | CONTROL_METHODS | {"status", "diagnostics", "observe", "sc
 
 
 DIAG_LIMIT = 64 * 1024
-DIAG_PHASES = frozenset(("read_quarantined", "read_resolved", "read_rejected", "read_recovery_expired", "cdp_timeout"))
+DIAG_PHASES = frozenset(("read_quarantined", "read_resolved", "read_rejected", "read_recovery_expired", "read_cleanup_failed", "cdp_timeout"))
 
 
 class DiagnosticLog:
