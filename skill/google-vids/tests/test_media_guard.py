@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import unittest
@@ -19,17 +18,22 @@ if "vids_media_guard" not in sys.modules:
     sys.modules[SPEC.name] = MODULE
     SPEC.loader.exec_module(MODULE)
 guard_module = sys.modules["vids_media_guard"]
+PLATFORM_SPEC = importlib.util.spec_from_file_location("vids_media_guard_platform_fixture", ROOT / "tests/platform_smoke.py")
+platform_fixture = importlib.util.module_from_spec(PLATFORM_SPEC)
+PLATFORM_SPEC.loader.exec_module(platform_fixture)
 
 
 class MediaGuardTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.path = Path(self.temp.name)
+        # Match the native platform suite: canonical paths avoid macOS /var
+        # aliases, and Windows fixtures need an explicit owner SID/private ACL
+        # rather than the elevated runner's inherited tempfile permissions.
+        self.path = self.enterContext(platform_fixture.private_temporary_directory(Path.home().resolve()))
         self.env = {**os.environ, "VIDS_STUDIO_FLEET_DIR": str(self.path / "fleet"),
                     "VIDS_STUDIO_MEDIA_BUDGET_DIR": str(self.path / "media")}
-        subprocess.run([sys.executable, str(ROOT / "native/fleet.py"), "policy", "--max-concurrency", "1", "--json"],
-                       env=self.env, check=True, capture_output=True)
+        policy = subprocess.run([sys.executable, str(ROOT / "native/fleet.py"), "policy", "--max-concurrency", "1", "--json"],
+                                env=self.env, text=True, encoding="utf-8", errors="replace", capture_output=True)
+        self.assertEqual(policy.returncode, 0, f"Private fleet fixture initialization failed.\nstdout:\n{policy.stdout}\nstderr:\n{policy.stderr}")
 
     def markers(self):
         return list((self.path / "media").glob("slot-*.json"))
