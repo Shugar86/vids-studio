@@ -2,6 +2,9 @@
 
 ## Unreleased — shared production helpers / общие инструменты производства
 
+- Export observation can use a fresh exact-document Chrome download event when Page events are absent. Preflight refreshes only previously correlated download IDs; completed watches no longer consume later exports. Unknown/ambiguous downloads are not cleared by cancellation. Added bounded local MP4 discovery and explicit runner-lease guidance.
+- Учёт экспорта использует свежее событие Chrome с полным адресом нужного документа, если события Page отсутствуют. Preflight сверяет только ранее связанные ID загрузок; завершённые ожидания больше не захватывают следующие экспорты. Отмена не стирает неопределённость. Добавлены ограниченный поиск MP4 и правила управления во время экспорта.
+
 - Codex and Claude receive the same montage, layer rendering, website capture, subtitle, blind ASR and frame-cut QA helpers. Profile identity remains strict; montage uses explicit document bindings, private capabilities on stdin and stops on unknown outcomes.
 - Local QA, ASR, layer rendering and capture use the shared media admission budget. Montage CLI supports Linux/macOS; Windows uses native MCP tools directly. The published v0.4.0 ZIP files remain unchanged; these additions are in source builds.
 - Codex и Claude получают одинаковые помощники монтажа, слоёв, сайтов, титров, слепого ASR и покадровой проверки склеек. Идентичности профилей разделены; монтаж использует точную привязку документа, приватные capability через stdin и остановку при unknown.

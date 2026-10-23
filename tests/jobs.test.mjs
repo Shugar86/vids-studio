@@ -289,3 +289,17 @@ test('explicit FFmpeg tools verify exports without PATH and do not fall back fro
     }
   }
 });
+
+test('acknowledgement cannot report cancellation while the same attachment still has a pending download',async t=>{
+  const f=await recoveryFixture(t,{downloadLost:true});const original=f.jobs.bridge;
+  f.jobs.bridge=async(method,args)=>method==='export_preflight'?{ok:true,result:{sessionId:'session-a',documentId:'document-a',exportWatch:{state:'armed'}}}:original(method,args);
+  await assert.rejects(f.jobs.cancel({...f.access,acknowledgeUnknown:{...f.auth,evidence:'Inspected the known downloaded candidate and this exact document.'}}),{code:'EXPORT_STILL_PENDING'});
+  assert.equal(f.jobs.status(f.access).state,'needs_reconciliation');
+  assert.equal(f.calls.filter(c=>c.method==='export_trigger').length,1);
+});
+test('document-correlated browser download keeps honest provenance without inventing a Page GUID',async t=>{
+  const f=await fixture(t,{bridge:async(method,args)=>method==='export_download_status'?{ok:true,result:{jobId:args.jobId,sessionId:'session-a',documentId:'document-a',state:'completed',downloadId:7,filename:source,correlation:'document_referrer'}}:null});
+  const started=await f.jobs.start(f.args);assert.equal(started.controlDisposition,'export_runner_owned');await f.jobs.drain();
+  const result=f.jobs.result({jobId:started.id,jobToken:started.jobToken});
+  assert.equal(result.provenance.correlation,'document_referrer');assert.equal(result.provenance.guid,undefined);
+});

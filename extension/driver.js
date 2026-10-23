@@ -1076,9 +1076,9 @@ export function createDriver(chromeApi, options = {}) {
         if (target.pendingInput && !READ_OPERATIONS.has(request.method)) fail("BROWSER_RECOVERING",
           "A timed-out scroll is still pending in Chrome. Observe/status remain available, but no new mutation is allowed until it settles and control is reconciled. Do not replay it.");
         if (request.method === "export_preflight") {
-          // Fresh in-memory state for this attachment only. No CDP, download
-          // search, menu interaction or cached native status is involved.
-          result = {sessionId: target.id, documentId: target.documentId, exportWatch: exports.pending(target.id)};
+          // Fresh in-memory state for this attachment only. No CDP, broad download
+          // history search, menu interaction or cached native status is involved.
+          result = {sessionId: target.id, documentId: target.documentId, exportWatch: await exports.preflight(target.id)};
         }
         else if (request.method === "observe") result = await observe(target, params);
         else if (request.method === "screenshot") result = await screenshot(target, params);

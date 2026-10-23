@@ -226,3 +226,9 @@ never replays a click. The job's technical success does not establish audiovisua
 QA. Unsupported menus/referrers stop for reconciliation. Otherwise use an observed
 authorized export route and verify the actual final file; see
 [review-and-delivery](review-and-delivery.md).
+
+### Export lease and file receipt
+
+After job_start the runner uses the supplied lease: do not release/reacquire control or edit this document while its job is queued/running/waiting. Poll job_status with backoff and do independent local work. The runner releases control before local verification. A cancellation request does not cancel a Chrome download. EXPORT_STILL_PENDING means the browser watch is still unresolved; do not claim that cancellation cleared it or automatically ask for a new pairing code.
+
+The download receipt distinguishes frame_and_document from document_referrer correlation. The latter uses a fresh browser download event with the exact full Vids document referrer and exact download ID; it does not fabricate a Page GUID. Origin-only/missing referrers and filename matches never count as provenance. If no path is available, use the bounded local discovery helper in client-tools and verify candidates. Do not ask for a path before checking the permitted download locations.

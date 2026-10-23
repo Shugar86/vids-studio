@@ -91,7 +91,7 @@ test('real isolated MV3 debugger correlates ordinary HTTP, redirect and blob dow
   await writeFile(join(profile,'Default','Preferences'),JSON.stringify({download:{default_directory:downloads,prompt_for_download:false,directory_upgrade:true}}));
   await writeFile(join(ext,'export-watch.js'),await readFile(new URL('../extension/export-watch.js',import.meta.url)));
   await writeFile(join(ext,'manifest.json'),JSON.stringify({manifest_version:3,name:'Isolated export watch',version:'1.0',permissions:['debugger','downloads','tabs'],host_permissions:['https://docs.google.com/*'],background:{service_worker:'background.js',type:'module'}}));
-  await writeFile(join(ext,'background.js'),`import {createExportWatcher} from './export-watch.js';globalThis.watch=createExportWatcher(chrome);chrome.debugger.onEvent.addListener(watch.onDebuggerEvent);`);
+  await writeFile(join(ext,'background.js'),`import {createExportWatcher} from './export-watch.js';globalThis.watch=createExportWatcher(chrome);chrome.debugger.onEvent.addListener((...args)=>{if(!globalThis.suppressPageDownloads)watch.onDebuggerEvent(...args);});`);
   const child=spawn(chromium.executablePath(),['--headless=new','--no-sandbox','--disable-gpu','--no-first-run','--no-default-browser-check',`--user-data-dir=${profile}`,'--remote-debugging-port=0','--remote-debugging-address=127.0.0.1',`--disable-extensions-except=${ext}`,`--load-extension=${ext}`,'about:blank'],{stdio:['ignore','ignore','pipe']});let browser;
   const childClosed = new Promise(resolve => child.once('close', resolve));
   try {
@@ -110,14 +110,16 @@ test('real isolated MV3 debugger correlates ordinary HTTP, redirect and blob dow
     const page=await context.newPage();await page.goto('https://docs.google.com/videos/d/export_fixture/edit');
     const binding=await worker.evaluate(async url=>{const [tab]=await chrome.tabs.query({url});await chrome.debugger.attach({tabId:tab.id},'1.3');await chrome.debugger.sendCommand({tabId:tab.id},'Page.enable');const {frameTree}=await chrome.debugger.sendCommand({tabId:tab.id},'Page.getFrameTree');return {tabId:tab.id,frameId:frameTree.frame.id,documentId:'export_fixture',sessionId:'fixture-session'};},page.url());
     const ids=[];
-    for(const label of ['direct','redirect','blob']) {
+    for(const label of ['direct','redirect','blob','no-page']) {
+      await worker.evaluate(value=>{globalThis.suppressPageDownloads=value;},label==='no-page');
       const jobId=`job-${label}`;await worker.evaluate(binding=>watch.arm(binding),{...binding,jobId});
-      await page.locator(`#${label}`).click({noWaitAfter:true});let result;
+      await page.locator(`#${label==='no-page'?'direct':label}`).click({noWaitAfter:true});let result;
       for(let attempt=0;attempt<30;attempt++){result=await worker.evaluate(({jobId,sessionId})=>watch.status(jobId,sessionId),{jobId,sessionId:binding.sessionId});if(result.state==='completed')break;await page.waitForTimeout(100);}
       assert.equal(result.state,'completed',JSON.stringify(result));assert.ok(result.filename.startsWith(downloads+'/'));assert.equal(JSON.stringify(result).includes('https://'),false);ids.push(result.downloadId);
+      if(label==='no-page'){assert.equal(result.guid,undefined);assert.equal(result.correlation,'document_referrer');}
       assert.equal(await readFile(result.filename,'utf8'),label==='blob'?'blob bytes':'fixture bytes');
     }
-    assert.equal(new Set(ids).size,3);
+    assert.equal(new Set(ids).size,4);
   } finally {
     try { await browser?.close(); }
     finally {
@@ -140,5 +142,33 @@ test('empty or origin-only referrers cannot misattribute another tab’s same UR
     const f=fixture();f.watch.arm(f.binding);f.begin();f.created({...f.item,id:99,referrer});f.complete();
     const unresolved=await f.watch.status('job-1','session-1');assert.equal(unresolved.state,'needs_reconciliation');assert.equal(unresolved.code,'EXPORT_REFERRER_UNVERIFIED');assert.equal(unresolved.downloadId,undefined);assert.equal(f.queries.length,0);
     f.created(f.item);assert.equal((await f.watch.status('job-1','session-1')).downloadId,undefined);
+  }
+});
+
+test('exact document download events complete without Page download events and unblock preflight',async()=>{
+  const f=fixture();f.watch.arm(f.binding);f.watch.markTriggerAccepted('job-1');f.created(f.item);
+  assert.equal(await f.watch.preflight('session-1'),null);
+  const result=await f.watch.status('job-1','session-1');
+  assert.equal(result.state,'completed');assert.equal(result.correlation,'document_referrer');assert.equal(result.guid,undefined);
+  assert.equal(result.filename,f.item.filename);assert.deepEqual(f.queries,[{id:42}]);
+  f.watch.arm({...f.binding,jobId:'job-2'});
+  assert.equal((await f.watch.status('job-1','session-1')).state,'completed');
+});
+test('document event fallback rejects foreign, origin-only, old and non-media candidates',async()=>{
+  for(const patch of [{referrer:'https://docs.google.com/videos/d/other/edit'},{referrer:'https://docs.google.com/'},{referrer:''},{startTime:'2000-01-01T00:00:00Z'},{filename:'/tmp/document.pdf',mime:'application/pdf'}]){
+    const f=fixture();f.watch.arm(f.binding);f.created({...f.item,...patch});
+    assert.equal((await f.watch.status('job-1','session-1')).state,'armed');assert.equal(f.queries.length,0);
+  }
+});
+test('completed receipt is not changed by a later export from the same document',async()=>{
+  const f=fixture();f.watch.arm(f.binding);f.begin();f.created(f.item);f.complete();await f.watch.status('job-1','session-1');
+  f.watch.onDebuggerEvent({tabId:9},'Page.downloadWillBegin',{frameId:'frame-1',guid:'later',url:f.item.url,suggestedFilename:'project.mp4'});
+  assert.equal((await f.watch.status('job-1','session-1')).state,'completed');assert.equal(f.watch.pending('session-1'),null);
+});
+
+test('Windows absolute download paths are accepted without treating relative paths as exports',async()=>{
+  for(const [filename,expected] of [['C:\\Users\\Example\\Downloads\\clip.mp4','completed'],['C:clip.mp4','needs_reconciliation']]){
+    const f=fixture();f.item.filename=filename;f.watch.arm(f.binding);f.created(f.item);
+    assert.equal((await f.watch.status('job-1','session-1')).state,expected);
   }
 });

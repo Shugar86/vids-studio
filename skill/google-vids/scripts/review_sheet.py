@@ -54,10 +54,12 @@ def no_symlinks(path):
 def parse_cuts(value):
     if not value:
         return []
+    if isinstance(value, list):
+        value = ",".join(value)
     try:
         result = sorted(set(float(part) for part in value.split(",")))
     except ValueError as error:
-        raise ValueError("--cuts must be comma-separated seconds") from error
+        raise ValueError("--cuts must contain seconds separated by commas or spaces") from error
     if len(result) > MAX_CUTS or any(not math.isfinite(v) or v < 0 for v in result):
         raise ValueError(f"Supply at most {MAX_CUTS} finite, nonnegative cut times")
     return result
@@ -317,7 +319,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path, help="New directory; existing paths and symlinks are refused")
-    parser.add_argument("--cuts", default="", help="Actual cut times in seconds, comma-separated; no automatic cut detection")
+    parser.add_argument("--cuts", nargs="+", default=[], help="Actual cut times in seconds, separated by commas or spaces; no automatic cut detection")
     parser.add_argument("--safe-area", help="Explicit left,top,right,bottom fractional insets (e.g. 0.08,0.10,0.08,0.15)")
     parser.add_argument("--safe-area-label", help="Your source/meaning for the guide; no platform defaults are assumed")
     parser.add_argument("--font", type=Path, help="Existing local font if automatic font discovery fails")

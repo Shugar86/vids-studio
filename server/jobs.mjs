@@ -56,7 +56,7 @@ export class ExportJobs {
     this.store.create(job); this.active.set(job.id, job);
     const task = new Promise(resolve => setImmediate(resolve)).then(() => this.run(job, {sessionId: args.sessionId, controlToken: args.controlToken})).finally(() => {this.active.delete(job.id); this.tasks.delete(job.id);});
     this.tasks.set(job.id, task);
-    return {...publicJob(job), jobToken};
+    return {...publicJob(job), jobToken, controlDisposition: 'export_runner_owned', nextStep: 'Poll this job. Do not edit, release, or reacquire this session control while its export runner is active.'};
   }
   save(job) {
     const stored = this.store.get(job.id);
@@ -132,8 +132,8 @@ export class ExportJobs {
   }
   async finishDownload(job, auth, download) {
     requireValue(download?.jobId === job.id && download.sessionId === job.sessionId && download.documentId === job.documentId && download.state === 'completed', 'EXPORT_BINDING_CHANGED', 'The completed download must match this job, original session and document.');
-    requireValue(typeof download.guid === 'string' && Number.isInteger(download.downloadId) && typeof download.filename === 'string', 'EXPORT_EVIDENCE_INCOMPLETE', 'The download lacks frame-correlated provenance.');
-    job.evidence.push({kind: 'correlated_download', guid: download.guid, downloadId: download.downloadId, frameId: download.frameId, sessionId: download.sessionId, documentId: download.documentId, at: new Date(this.now()).toISOString()});
+    requireValue((typeof download.guid === 'string' || download.correlation === 'document_referrer') && Number.isInteger(download.downloadId) && typeof download.filename === 'string', 'EXPORT_EVIDENCE_INCOMPLETE', 'The download lacks frame-correlated provenance.');
+    job.evidence.push({kind: 'correlated_download', guid: download.guid, correlation: download.correlation || 'frame_and_document', downloadId: download.downloadId, frameId: download.frameId, sessionId: download.sessionId, documentId: download.documentId, at: new Date(this.now()).toISOString()});
     job.stage = 'download_observed_complete'; this.save(job);
     const released = await this.release(job, auth);
     requireValue(released, 'CONTROL_RELEASE_UNCONFIRMED', 'Control release was not confirmed; local verification has not started.');
@@ -151,7 +151,7 @@ export class ExportJobs {
       if (error.code !== 'MEDIA_CHECK_CANCELED' || !this.syncCancellation(job)) throw error;
       job.state = 'cancelled'; job.stage = 'local_verification_stopped'; job.cancellation = 'source_download_retained_google_export_not_canceled'; this.save(job); return;
     }
-    job.result = {...result, provenance: {profileId: job.profileId, documentId: job.documentId, sessionId: job.sessionId, downloadId: download.downloadId, guid: download.guid, operationIds: [...job.operationIds]}};
+    job.result = {...result, provenance: {profileId: job.profileId, documentId: job.documentId, sessionId: job.sessionId, downloadId: download.downloadId, guid: download.guid, correlation: download.correlation || 'frame_and_document', operationIds: [...job.operationIds]}};
     job.evidence.push({kind: 'local_file_verified', sha256: result.sha256, at: new Date(this.now()).toISOString()});
     if (this.syncCancellation(job)) {
       job.state = 'cancelled'; job.stage = 'verification_finished_after_cancel'; job.cancellation = 'local_result_retained_google_export_not_canceled';
@@ -208,6 +208,14 @@ export class ExportJobs {
     if (TERMINAL.has(prior.state)) return publicJob(prior);
     requireValue(typeof request.evidence === 'string' && request.evidence.trim().length >= 16 && request.evidence.length <= 1024, 'RECOVERY_EVIDENCE_REQUIRED', 'Record what was checked in the current document and existing downloads before abandoning this unresolved intent.');
     const auth = await this.recoveryAuth(prior, request);
+    if (auth.sessionId === prior.sessionId) {
+      // Abandoning an intent is not proof that the browser stopped exporting.
+      // Never report cancellation/new-export readiness while its watch is active.
+      const preflight = (await this.call('export_preflight', auth)).result;
+      requireValue(preflight?.sessionId === auth.sessionId && preflight.documentId === prior.documentId &&
+        Object.hasOwn(preflight, 'exportWatch'), 'EXPORT_PREFLIGHT_UNVERIFIED', 'Fresh browser export state is required before abandoning this intent.');
+      requireValue(preflight.exportWatch === null, 'EXPORT_STILL_PENDING', 'The browser has not confirmed the previous download. Keep this job for inspection; cancellation cannot clear or replay an uncertain export.');
+    }
     const job = this.store.claimRecovery(access.jobId, access.jobToken, this.instance, tokenHash(auth.controlToken), prior);
     job.evidence.push({kind: 'operator_acknowledged_unknown', evidence: request.evidence.trim(), documentId: job.documentId, sessionId: auth.sessionId, at: new Date(this.now()).toISOString()}); this.save(job);
     requireValue(await this.release(job, auth), 'CONTROL_RELEASE_UNCONFIRMED', 'The recovery lease was not released; the intent remains unresolved.');
@@ -228,10 +236,10 @@ export function registerJobTools(server, {z, bridgeRequest, PROFILE, directory =
     cancel: {...access, acknowledgeUnknown: z.object({sessionId: z.string().min(1).max(128), controlToken: z.string().min(32).max(128), evidence: z.string().min(16).max(1024)}).strict().optional()},
   };
   const descriptions = {
-    start: 'Start one typed export_mp4 job for the currently attached Google Vids document with this task’s write lease. Requires a fresh explicit attestation that this profile automatically saves downloads without a system Save As dialog. Uses observed English File/Download/MP4 menu targets, not guessed clicks. Generate a UUID jobId and random 32-byte base64url jobToken and retain both before calling. Repeating identical arguments with that capability only returns the existing status. Never replay an unknown intent.',
+    start: 'Start one typed export_mp4 job for the currently attached Google Vids document with this task’s write lease. The runner uses the supplied control lease until download observation finishes: do not release/reacquire it or edit this document while the job runs. Poll job_status; use local preparation during the wait. Requires a fresh explicit attestation that this profile automatically saves downloads without a system Save As dialog. Uses observed English File/Download/MP4 menu targets, not guessed clicks. Generate a UUID jobId and random 32-byte base64url jobToken and retain both before calling. Repeating identical arguments with that capability only returns the existing status. Never replay an unknown intent.',
     status: 'Read only this job’s durable stages, immutable action outcomes and later evidence using its jobToken. Optional inspectDownload accepts and consumes only this owner’s newly acquired writer lease for the original session/document, observes the existing watch once, and may verify an already-completed file after releasing the lease. It never replays an action.',
     result: 'Return the job’s verified local MP4 path, SHA-256, actual duration/dimensions/streams and download provenance. Technical verification does not claim listening, movement review or subtitle accuracy.',
-    cancel: 'Request stopping only this job’s further steps. Queued jobs can be canceled; an already-sent Google export or browser download is not canceled by this request. Optional acknowledgeUnknown requires this owner’s newly acquired writer lease for the exact document plus explicit checked evidence; it abandons the old intent without claiming the external export was canceled. Only a new intent may then start.',
+    cancel: 'Request stopping only this job’s further steps. Queued jobs can be canceled; an already-sent Google export or browser download is not canceled by this request. Optional acknowledgeUnknown requires this owner’s newly acquired writer lease for the exact document plus explicit checked evidence; it abandons the old intent without claiming the external export was canceled. This cannot clear an armed browser watch: EXPORT_STILL_PENDING keeps the intent unresolved. A new intent requires a clear browser preflight.',
   };
   for (const [name, schema] of Object.entries(definitions)) server.registerTool(`vids_job_${name}`, {description: descriptions[name], inputSchema: schema, annotations: {readOnlyHint: name === 'result', destructiveHint: name === 'start', idempotentHint: name !== 'start', openWorldHint: name === 'start'}}, async args => {
     try { return {content: [{type: 'text', text: JSON.stringify(await service()[name](args), null, 2)}]}; }

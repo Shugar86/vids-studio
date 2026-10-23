@@ -118,3 +118,7 @@ This local helper compares frame cuts against a plan, flags brief white/black fl
 `vids_call.mjs` resolves its own installed profile relative to the skill or through `VIDS_CODEX_BRIDGE` / `VIDS_CLAUDE_BRIDGE`, validating identity before launch. It never falls back to the other profile. Pass JSON through `-` and stdin to keep capabilities out of argv. Prefer normal MCP tools. The helper does not bypass discovery, ownership, fresh snapshots, unknown receipts or background-only operation.
 
 Heavy `qa_export`, `cut_check`, `asr_blind`, `render_layer` and `capture_site` work waits for shared cross-profile media admission. This caps local processes, not video assignments. Do not nest a budgeted helper inside an active permit, or remove an interrupted permit marker without the prescribed confirmation.
+
+## Download discovery
+
+`python3 scripts/find_downloads.py --name "My project" --since "2026-10-23T10:00:00Z"` lists local MP4 candidates in the configured XDG download folder, Downloads and Загрузки. Use `--directory /absolute/path` for a custom location. The bounded scan does not recurse or select the newest file automatically. Compare candidate contents, duration and scene/version with your own project before using it; the list is not browser export provenance. No match is not permission to trigger another export.

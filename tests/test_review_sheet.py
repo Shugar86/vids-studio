@@ -139,3 +139,11 @@ class ReviewSheetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class CutArgumentsTests(unittest.TestCase):
+    def test_both_existing_comma_and_space_cli_forms(self):
+        for values in [["0.8,1.55"],["0.8","1.55"]]:
+            with mock.patch.object(review_sheet,"build",return_value={"status":"ok","coverage":{}}) as build:
+                self.assertEqual(review_sheet.main(["input.mp4","--output-dir","output","--cuts",*values]),0)
+                self.assertEqual(review_sheet.parse_cuts(build.call_args.args[0].cuts),[0.8,1.55])
+        self.assertEqual(review_sheet.parse_cuts("0.8,1.55"),[0.8,1.55])
