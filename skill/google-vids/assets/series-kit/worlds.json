@@ -1,0 +1,48 @@
+{
+  "version": "2.0",
+  "note": "Example lived-in worlds. Copy light and traces into prompts verbatim; neighbouring episodes use different worlds. Replace with the series' own places.",
+  "worlds": [
+    {
+      "id": "kitchen-night",
+      "light": "cold light from an open fridge plus one warm pendant lamp over the table",
+      "traces": "mugs, crumbs, a phone charger, a laptop among dishes",
+      "wardrobe": "t-shirt or hoodie"
+    },
+    {
+      "id": "workshop",
+      "light": "flat fluorescent tube light, dust in the air",
+      "traces": "tools on a pegboard, sawdust, unfinished parts, a 3D printer",
+      "wardrobe": "work shirt with rolled sleeves"
+    },
+    {
+      "id": "home-office-overcast",
+      "light": "overcast daylight from a side window plus monitor glow",
+      "traces": "tangled cables, sticky notes, a mug with dried coffee, headphones",
+      "wardrobe": "dark navy shirt or sweater"
+    },
+    {
+      "id": "car",
+      "light": "daylight with windshield reflections",
+      "traces": "phone holder, a receipt on the dashboard, a travel mug",
+      "wardrobe": "jacket"
+    },
+    {
+      "id": "stairwell-balcony",
+      "light": "mixed street light and a bare bulb",
+      "traces": "a bicycle, cardboard boxes, a jar of screws",
+      "wardrobe": "hoodie or jacket"
+    },
+    {
+      "id": "meeting-room",
+      "light": "even overhead office light",
+      "traces": "markers, a half-erased whiteboard, someone else's sticky notes",
+      "wardrobe": "dark navy shirt"
+    },
+    {
+      "id": "courtyard-winter",
+      "light": "grey winter daylight, snow",
+      "traces": "a bench, a grocery bag, footprints in snow",
+      "wardrobe": "winter jacket and hat"
+    }
+  ]
+}

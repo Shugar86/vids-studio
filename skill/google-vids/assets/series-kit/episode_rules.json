@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "note": "Template limits; the series sets its own. Short-form completion data favours 15–60 s; voice tempo for shorts is often 160–200 wpm.",
+  "duration_seconds": [
+    30,
+    60
+  ],
+  "spoken_words": [
+    70,
+    150
+  ],
+  "voice_tempo_wpm_target": [
+    150,
+    190
+  ],
+  "budget_caps": {
+    "image_generations": 8,
+    "video_generations": 6,
+    "review_rounds": 2
+  }
+}

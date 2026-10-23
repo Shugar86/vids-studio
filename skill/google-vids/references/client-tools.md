@@ -77,6 +77,15 @@ python3 scripts/cut_check.py exports/v1.mp4 --out qa/v1-cuts --plan 86,258,299 -
 
 Локальный помощник сопоставляет покадровые cuts с планом, отмечает короткие white/black flash и собирает полосы титров около стыков и заданных моментов. Источник не меняет; требует новый каталог вывода, Pillow и FFmpeg/ffprobe. Находки — эвристика для просмотра, не доказательство качества монтажа или восприятия речи.
 
+## Карточка выпуска серии
+
+```sh
+python3 -I scripts/series_card.py check /path/episodes/T1/card.json --kit /path/kit --recent /path/episodes/T0/card.json
+python3 -I scripts/series_card.py topic T1 --kit /path/kit --plan /path/topics.jsonl
+```
+
+Проверяет карточку по набору серии (`formats.json`, `worlds.json`, `episode_rules.json`; шаблон — `assets/series-kit/`) и оценивает риск слайдшоу по плану. `topic` заменяет `visual_brief` темы правилом формата из набора. Код 0 — без ошибок, 1 — есть ошибки, 2 — неверный вход; `--json` даёт машинный отчёт. Только stdlib и локальные файлы, без сети. Это проверка плана, а не готового видео. Метод — [series-production.md](series-production.md).
+
 ## Низкоуровневый клиент
 
 `scripts/vids_call.mjs` — вспомогательный клиент MCP своего профиля. Путь определяется относительно skill или через `VIDS_CODEX_BRIDGE` / `VIDS_CLAUDE_BRIDGE`; идентичность проверяется до запуска. Чужой профиль не используется как fallback. Для JSON аргументов используйте `-` и stdin, чтобы не помещать capability в argv. Предпочитайте доступные штатные инструменты. Helper не отменяет discovery, владение документом, свежесть snapshot или остановку после unknown.

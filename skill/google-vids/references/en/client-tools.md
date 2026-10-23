@@ -113,6 +113,15 @@ python3 scripts/cut_check.py exports/v1.mp4 --out qa/v1-cuts --plan 86,258,299 -
 
 This local helper compares frame cuts against a plan, flags brief white/black flashes and creates caption-band sheets around cuts or selected times. It preserves the source and requires a new output directory, Pillow and FFmpeg/ffprobe. Findings are review heuristics, not proof of editing quality or speech perception.
 
+## Series episode card
+
+```sh
+python3 -I scripts/series_card.py check /path/episodes/T1/card.json --kit /path/kit --recent /path/episodes/T0/card.json
+python3 -I scripts/series_card.py topic T1 --kit /path/kit --plan /path/topics.jsonl
+```
+
+Checks a card against a series kit (`formats.json`, `worlds.json`, `episode_rules.json`; template in `assets/series-kit/`) and scores slideshow risk on the plan. `topic` replaces a topic's `visual_brief` with the kit's format rule. Exit 0 means no errors, 1 errors, 2 invalid input; `--json` prints a machine-readable report. Stdlib and local files only, no network. It checks the plan, not the finished video. Method: [series production](series-production.md).
+
 ## Low-level MCP client
 
 `vids_call.mjs` resolves its own installed profile relative to the skill or through `VIDS_CODEX_BRIDGE` / `VIDS_CLAUDE_BRIDGE`, validating identity before launch. It never falls back to the other profile. Pass JSON through `-` and stdin to keep capabilities out of argv. Prefer normal MCP tools. The helper does not bypass discovery, ownership, fresh snapshots, unknown receipts or background-only operation.

@@ -1,0 +1,152 @@
+{
+  "version": "1.0",
+  "note": "Template series kit for series_card.py. Copy it into the author's private project and adapt the wording; keep the keys. Archetypes follow the Ink Theater method of OpenMontage.",
+  "formats": [
+    {
+      "id": "visual_explanation",
+      "label": "Visual explanation",
+      "truth_mode": "explainer",
+      "visual_brief": "Show the phenomenon first, then the mechanism. Turn the idea into one physical action on a simple object performed by the hero; explain with labels and arrows on the object at the moment it changes.",
+      "event_patterns": [
+        "same push, different result",
+        "two attempts: fails, then works",
+        "before → action → after of one object",
+        "one object travels between states"
+      ],
+      "dramaturgy": [
+        "misconception first, then the correction",
+        "a naive attempt partly works and breaks",
+        "connect with but/therefore, not and then",
+        "1–2 s of quiet after the insight"
+      ],
+      "styles": [
+        "ink",
+        "screen",
+        "overlay",
+        "photoreal"
+      ],
+      "default_style": "ink",
+      "max_graphic_seconds": 2,
+      "max_graphic_share": 0.25,
+      "metaphor_required": true
+    },
+    {
+      "id": "author_monologue",
+      "label": "Author monologue",
+      "truth_mode": "opinion",
+      "visual_brief": "The hero does something with an object while speaking, and the thought changes the action. Camera address is brief; most time goes to hands, object, reaction and pause.",
+      "event_patterns": [
+        "an action that embodies the thought",
+        "an attempt and its abandonment",
+        "an object that argues with the hero"
+      ],
+      "styles": [
+        "photoreal",
+        "overlay",
+        "ink"
+      ],
+      "max_graphic_seconds": 2,
+      "max_graphic_share": 0.15,
+      "metaphor_required": false
+    },
+    {
+      "id": "fictional_dialogue",
+      "label": "Staged dialogue",
+      "truth_mode": "fictional_scene",
+      "visual_brief": "A conversation as a scene of actions: each line is answered by a deed, each move complicates the situation, the author keeps the last turn. A second character stays silent and acts, or has its own voice; the speaker's mouth stays hidden without verified lip-sync.",
+      "event_patterns": [
+        "line → answering deed",
+        "expectation → turn → final joke",
+        "the other one does what the hero feared"
+      ],
+      "styles": [
+        "photoreal",
+        "screen",
+        "overlay"
+      ],
+      "max_graphic_seconds": 2,
+      "max_graphic_share": 0.15,
+      "metaphor_required": false
+    },
+    {
+      "id": "thought_experiment",
+      "label": "Thought experiment",
+      "truth_mode": "hypothesis",
+      "visual_brief": "The assumption as a deed in a lived-in world: every changed condition is a new physical consequence on screen, performed by the hero on an object. Label it as a thought experiment; state the model's limit in one line near the end. No 'A = B' cards.",
+      "event_patterns": [
+        "the assumption works and has an unexpected consequence",
+        "one condition changes and the world behaves differently",
+        "logic pushed to absurdity by a deed"
+      ],
+      "styles": [
+        "photoreal",
+        "ink",
+        "overlay"
+      ],
+      "max_graphic_seconds": 2,
+      "max_graphic_share": 0.2,
+      "metaphor_required": true
+    }
+  ],
+  "styles": {
+    "photoreal": "live scene in a world from worlds.json",
+    "ink": "Ink Theater: black line on white paper, a mascot performs the action on a simple contraption; black = structure and hero, orange = flow and arrows only, red = the problem, blue = the good end state; ≥35% empty paper; a programmatic clip rendered locally and inserted into Vids",
+    "screen": "a plausible interface filling the frame, labelled as an example, with an on-screen event",
+    "overlay": "up to 3 words over the shot, tied to the object at the moment of change"
+  },
+  "archetypes": {
+    "mechanism": "load → crank → the contraption works → the result pops out",
+    "chaos_to_order": "chaos, one key act, order",
+    "journey_pitfalls": "a path draws on, the hero walks, falls into a pit or hits a node",
+    "one_to_many": "one source splits into branches that each act",
+    "push_uphill": "slow strained push up, the crest, a fast roll back",
+    "well_extract": "lower a bucket into noise and pull out the one valuable thing",
+    "two_attempts": "fails, then works; the difference is visible",
+    "same_push_different_result": "one input, two outcomes"
+  },
+  "shot_sizes": {
+    "wide": "wide",
+    "medium": "medium",
+    "close": "close-up",
+    "detail": "detail",
+    "insert": "insert: a screen or object filling the frame"
+  },
+  "generic_words": [
+    "красив",
+    "уютн",
+    "атмосферн",
+    "интересн",
+    "современн",
+    "стильн",
+    "эпичн",
+    "вдохновля",
+    "кинематограф",
+    "волшебн",
+    "грустн",
+    "весел",
+    "весёл",
+    "beautiful",
+    "cozy",
+    "atmospheric",
+    "modern",
+    "stylish",
+    "epic",
+    "inspiring",
+    "cinematic",
+    "moody",
+    "stunning",
+    "magical",
+    "sad",
+    "happy"
+  ],
+  "banned_openings": [
+    "Допустим",
+    "Представь",
+    "Представьте",
+    "Привет",
+    "Всем привет",
+    "Imagine",
+    "Hi",
+    "Hey"
+  ]
+}

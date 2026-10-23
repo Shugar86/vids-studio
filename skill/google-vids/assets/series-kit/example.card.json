@@ -1,0 +1,314 @@
+{
+  "card_version": "2.1",
+  "adapted_from": "Public demo «Sasha and the lamp» (P022, Claude v5). Worked example of the card format; not voiced or assembled.",
+  "topic_id": "P022",
+  "title": "Я сказал «прикольно», а ты уже составил бизнес-план",
+  "format": "fictional_dialogue",
+  "truth_mode": "fictional_scene",
+  "label": "Постановка",
+  "situation": {
+    "want": "Саша хочет ночью просто помечтать о смешной лампе",
+    "obstacle": "нейросеть за секунды превращает игрушку в продукт с ценой, подпиской и сроком",
+    "turn": "даже просьбу просто представить она превращает в техническое задание",
+    "final_image": "Саша показывает лампе план, и лампа снова отворачивается"
+  },
+  "event_on_screen": "Лампа сама отворачивается к стене, когда Саша открывает рабочий чат, а в финале отворачивается от плана.",
+  "opening": {
+    "seconds": [
+      0,
+      2
+    ],
+    "frame": "Саша ночью опускает глаза в ноутбук, лампа над ним начинает поворачиваться к стене"
+  },
+  "world": "kitchen-night",
+  "styles": [
+    "photoreal",
+    "screen",
+    "overlay"
+  ],
+  "beats": [
+    {
+      "t": [
+        0,
+        6.2
+      ],
+      "kind": "scene",
+      "picture": "Саша и лампа в одном кадре, руки на клавиатуре",
+      "action": "на «открываю» лампа сама уходит к стене и остаётся отвёрнутой, свет уходит с лица",
+      "speech": "Я придумал лампу, которая отворачивается, когда я ночью открываю рабочий чат.",
+      "sound": "скрип шарнира",
+      "shot": "medium",
+      "why": "герой и лампа в одном кадре: событие и реакция вместе"
+    },
+    {
+      "t": [
+        6.2,
+        8.6
+      ],
+      "kind": "scene",
+      "picture": "тот же дубль",
+      "action": "Саша виновато косится на отвёрнутую лампу",
+      "speech": "Ты такой: только одним глазком гляну.",
+      "shot": "close",
+      "why": "виноватый взгляд читается только крупно"
+    },
+    {
+      "t": [
+        8.6,
+        10.0
+      ],
+      "kind": "scene",
+      "picture": "стена с пятном света",
+      "action": "свет лампы на стене",
+      "speech": "А она уже к стене.",
+      "shot": "detail",
+      "why": "результат поворота: свет ушёл на стену"
+    },
+    {
+      "t": [
+        10.0,
+        11.2
+      ],
+      "kind": "scene",
+      "picture": "хвост того же дубля, лампа отвёрнута",
+      "action": "довольная полуулыбка в экран ноутбука",
+      "speech": "Ну прикольно же.",
+      "shot": "close",
+      "why": "реакция героя на свою выдумку"
+    },
+    {
+      "t": [
+        11.2,
+        18.1
+      ],
+      "kind": "screen",
+      "picture": "чат крупно поверх тёмного кадра",
+      "changes": [
+        "сообщение Саши",
+        "ответ: Отлично! Расписываю",
+        "карточка: аудитория",
+        "карточка: цена",
+        "карточка: подписка",
+        "штамп: запуск пятница"
+      ],
+      "speech": "Кидаю идею нейросети. Она сразу: отлично. Аудитория, цена, подписка. К пятнице запускаем.",
+      "sound": "удар штампа",
+      "shot": "insert",
+      "why": "эскалация идёт на экране: экран на весь кадр"
+    },
+    {
+      "t": [
+        18.1,
+        20.9
+      ],
+      "kind": "scene",
+      "picture": "Саша поднимает ладонь",
+      "action": "жест «стоп», полуулыбка недоумения",
+      "speech": "Подожди. Я пока придумал обиженную лампу.",
+      "shot": "medium",
+      "why": "жест «стоп» читается всем телом"
+    },
+    {
+      "t": [
+        20.9,
+        22.6
+      ],
+      "kind": "scene",
+      "picture": "стена, на неё налеплен штамп",
+      "action": "штамп «пятница» шлёпается на пятно света",
+      "speech": "Откуда у меня уже пятница?",
+      "shot": "detail",
+      "why": "срок бьёт прямо по игрушке"
+    },
+    {
+      "t": [
+        22.6,
+        28.3
+      ],
+      "kind": "scene",
+      "picture": "стол с лампой",
+      "action": "у лампы появляется кнопка, сверху налепляется ценник подписки",
+      "speech": "Я ещё даже не решил, нужна ли ей кнопка: ладно, ещё пять минут. А у нас уже подписка на освещение.",
+      "shot": "wide",
+      "why": "видна вся лампа и всё, что на неё налепили"
+    },
+    {
+      "t": [
+        28.3,
+        32.0
+      ],
+      "kind": "scene",
+      "picture": "лампа",
+      "action": "лампа медленно поворачивается обратно, свет возвращается на стол",
+      "speech": "Говорю: давай пока просто представим, как она поворачивается.",
+      "shot": "medium",
+      "why": "лампа действует сама: свет возвращается на стол"
+    },
+    {
+      "t": [
+        32.0,
+        35.6
+      ],
+      "kind": "scene",
+      "picture": "освещённый стол",
+      "action": "на свет падает толстое техническое задание",
+      "speech": "А в ответ: конечно. Начнём с технического задания.",
+      "sound": "шлепок бумаги",
+      "shot": "detail",
+      "why": "вес бумаги: мечта стала задачей"
+    },
+    {
+      "t": [
+        35.6,
+        40.4
+      ],
+      "kind": "scene",
+      "picture": "Саша спокойно смотрит в камеру, единственный раз за выпуск",
+      "action": "на «мечтаем» рядом появляется опрос",
+      "speech": "Мне бы хватило одного вопроса: мы мечтаем или уже начинаем?",
+      "shot": "close",
+      "why": "единственное обращение к зрителю — вопрос автора"
+    },
+    {
+      "t": [
+        40.4,
+        45.4
+      ],
+      "kind": "scene",
+      "picture": "Саша и лампа, руки на клавиатуре",
+      "action": "Саша показывает лампе план на экране, лампа сама отворачивается, он смиренно улыбается",
+      "speech": "Так. Показываю лампе наш план. Вот. Опять отвернулась.",
+      "sound": "скрип шарнира",
+      "shot": "medium",
+      "why": "та же расстановка, что в начале: лампа снова отворачивается, шутка замыкается",
+      "hero": true
+    }
+  ],
+  "spoken_text": "Я придумал лампу, которая отворачивается, когда я ночью открываю рабочий чат. Ты такой: только одним глазком гляну. А она уже к стене. Ну прикольно же. Кидаю идею нейросети. Она сразу: отлично. Аудитория, цена, подписка. К пятнице запускаем. Подожди. Я пока придумал обиженную лампу. Откуда у меня уже пятница? Я ещё даже не решил, нужна ли ей кнопка: ладно, ещё пять минут. А у нас уже подписка на освещение. Говорю: давай пока просто представим, как она поворачивается. А в ответ: конечно. Начнём с технического задания. Мне бы хватило одного вопроса: мы мечтаем или уже начинаем? Так. Показываю лампе наш план. Вот. Опять отвернулась.",
+  "voices": {
+    "Саша": "Elio / Russian",
+    "нейросеть": "молчит — текст на экране"
+  },
+  "generation": [
+    {
+      "what": "Саша и лампа: опускает глаза, лампа сама отворачивается",
+      "beats": [
+        1,
+        2,
+        4
+      ],
+      "from": "мастер Саши + ключевой кадр kitchen-night",
+      "prompt_notes": "both hands stay on the keyboard and never come near the lamp; nobody touches the lamp, it moves by itself; it stays turned away until the end; its light leaves his face; mouth closed",
+      "spec": {
+        "subject": "the man from the master reference, t-shirt; a green desk lamp on a hinge at the top left",
+        "motion": "he lowers his eyes to the laptop at about 2.5 s; at about 3 s the lamp swivels its shade up and away from him by itself and stays turned away; at about 5 s he glances sideways at it with a guilty closed-mouth half-smile",
+        "scene": "kitchen at night, cold light from an open fridge and one pendant lamp, mugs and crumbs around the laptop; overlays: none",
+        "framing": "medium shot, man right of centre, lamp top left in the foreground, fridge glow in the background",
+        "camera": "real-time, eye level, locked-off, deep focus"
+      }
+    },
+    {
+      "what": "ладонь «стоп»",
+      "beats": [
+        6
+      ],
+      "from": "кадр той же сцены",
+      "prompt_notes": "one gesture, open palm toward camera, puzzled half-smile, mouth closed",
+      "spec": {
+        "subject": "the same man, same t-shirt",
+        "motion": "raises an open palm toward the camera in a single stop gesture and holds it",
+        "scene": "same kitchen, the lamp still turned away; overlays: none",
+        "framing": "medium shot, centred torso, hand in the foreground",
+        "camera": "real-time, eye level, locked-off"
+      }
+    },
+    {
+      "what": "финал: лампа отворачивается от плана",
+      "beats": [
+        12
+      ],
+      "from": "последний кадр бита 11",
+      "prompt_notes": "hands on the keyboard; the lamp swivels away by itself at about 2.5 s; resigned closed-mouth half-smile after",
+      "spec": {
+        "subject": "the same man and the same lamp, as in the opening",
+        "motion": "he tilts the laptop toward the lamp as if showing it the plan; at about 2.5 s the lamp swivels away by itself; he turns to the camera with a resigned closed-mouth half-smile",
+        "scene": "same kitchen and light as the opening; overlays: none",
+        "framing": "medium shot matching the opening composition",
+        "camera": "real-time, eye level, locked-off"
+      }
+    }
+  ],
+  "graphics": [
+    {
+      "text": "ЗАПУСК ПЯТНИЦА",
+      "style": "overlay",
+      "on": "штамп на стене, бит 7"
+    },
+    {
+      "text": "Подписка на освещение",
+      "style": "overlay",
+      "on": "ценник на лампе, бит 8"
+    },
+    {
+      "text": "МЕЧТАЕМ / НАЧИНАЕМ?",
+      "style": "overlay",
+      "on": "опрос рядом с Сашей, бит 11"
+    }
+  ],
+  "sound_events": [
+    {
+      "t": 4.8,
+      "sound": "скрип шарнира"
+    },
+    {
+      "t": 16.6,
+      "sound": "удар штампа"
+    },
+    {
+      "t": 33.6,
+      "sound": "шлепок бумаги"
+    },
+    {
+      "t": 42.6,
+      "sound": "скрип шарнира"
+    }
+  ],
+  "avoid": [
+    "отдельный план лампы без Саши вместо совместного дубля",
+    "рука, которая двигает лампу",
+    "мелкий текст в чате"
+  ],
+  "truth": {
+    "factual_claims": [],
+    "sources": [],
+    "ai_disclosure": true
+  },
+  "series_check": {
+    "previous": [],
+    "differs_by": "первый пример формата"
+  },
+  "gates": {
+    "viewer_waits_for": "что сделает лампа и чем нейросеть ответит на простое «прикольно»",
+    "what_changes": "лампа отворачивается сама; игрушка за секунды обрастает ценой и сроком; в финале лампа отворачивается уже от плана",
+    "why_next": "каждая реплика нейросети делает игрушку серьёзнее — интересно, где Саша остановит",
+    "not_generic": "держится на лампе, которая отворачивается от рабочего чата, и на нейросети, превращающей шутку в продукт; с другой темой не сработает"
+  },
+  "budget": {
+    "image_generations": 6,
+    "video_generations": 4,
+    "review_rounds": 2
+  },
+  "taste": {
+    "design_read": "Ночная комедия наблюдения: тихая кухня, лампа с характером, эскалация на экране против спокойного героя.",
+    "visual_variance": 5,
+    "motion_intensity": 4,
+    "information_density": 3
+  },
+  "sample": {
+    "beats": [
+      1,
+      12
+    ],
+    "note": "хук и главный момент: проверить, что лампа двигается сама, руки на клавиатуре, рот закрыт"
+  }
+}

@@ -2,6 +2,9 @@
 
 ## Unreleased — shared production helpers / общие инструменты производства
 
+- Series production for channels run from a topic plan: a method reference (RU/EN), a series kit template, an episode card and `series_card.py`, which checks the card against the kit and scores slideshow risk on the plan. Stages S1–S6 with gates, roles and per-episode budgets. Ideas from OpenMontage are credited; no code was copied.
+- Производство серии по плану тем: справочник метода (RU/EN), шаблон набора серии, карточка выпуска и `series_card.py`, который проверяет карточку по набору и оценивает риск слайдшоу по плану. Стадии S1–S6 с воротами, роли и бюджет выпуска. Идеи OpenMontage указаны с источником; код не переносился.
+
 - Export observation can use a fresh exact-document Chrome download event when Page events are absent. Preflight refreshes only previously correlated download IDs; completed watches no longer consume later exports. Unknown/ambiguous downloads are not cleared by cancellation. Added bounded local MP4 discovery and explicit runner-lease guidance.
 - Учёт экспорта использует свежее событие Chrome с полным адресом нужного документа, если события Page отсутствуют. Preflight сверяет только ранее связанные ID загрузок; завершённые ожидания больше не захватывают следующие экспорты. Отмена не стирает неопределённость. Добавлены ограниченный поиск MP4 и правила управления во время экспорта.
 

@@ -16,6 +16,9 @@ different editor. An already authorized mixed workflow needs no repeated approva
   question only for a material missing fact, while continuing independent work.
 * **Editorial channel or series:** read [editorial-series](editorial-series.md).
   Preserve the author's reasoning and voice; do not turn every episode into an ad.
+  When episodes are produced from a topic plan without hand-directing each one,
+  add [series production](series-production.md): a series kit, an episode card
+  checked by `series_card.py`, and a gated pipeline with a budget.
 * **Targeted edit:** inspect the existing video and adjacent scenes. Preserve
   working choices and fix the named issue; a caption edit does not imply a redesign.
 * **“Make it better” or a substantial creative revision:** establish a direction

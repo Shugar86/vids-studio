@@ -54,3 +54,7 @@ independent reviewer the topic, editorial context and sample without the desired
 verdict. Ask what became interesting/clear, where an idea turned into advertising,
 where the voice became generic, and what the viewer actually saw. Apply the same
 facts, sound and export checks as [review-and-delivery](review-and-delivery.md).
+
+When a series runs from a topic plan without hand-directing each episode, these
+principles become a series kit, an episode card and gates: see
+[series production](series-production.md).
