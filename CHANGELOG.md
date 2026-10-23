@@ -1,5 +1,12 @@
 # Changelog · История изменений
 
+## Unreleased — shared production helpers / общие инструменты производства
+
+- Codex and Claude receive the same montage, layer rendering, website capture, subtitle, blind ASR and frame-cut QA helpers. Profile identity remains strict; montage uses explicit document bindings, private capabilities on stdin and stops on unknown outcomes.
+- Local QA, ASR, layer rendering and capture use the shared media admission budget. Montage CLI supports Linux/macOS; Windows uses native MCP tools directly. The published v0.4.0 ZIP files remain unchanged; these additions are in source builds.
+- Codex и Claude получают одинаковые помощники монтажа, слоёв, сайтов, титров, слепого ASR и покадровой проверки склеек. Идентичности профилей разделены; монтаж использует точную привязку документа, приватные capability через stdin и остановку при unknown.
+- Локальные QA, ASR, рендер слоёв и capture используют общий лимит медиа-нагрузки. CLI монтажа работает на Linux/macOS; Windows использует штатные MCP tools напрямую. Опубликованные ZIP v0.4.0 не изменялись; дополнения доступны в сборках из исходника.
+
 ## 0.4.0 — parallel preview / параллельная работа
 
 ### English

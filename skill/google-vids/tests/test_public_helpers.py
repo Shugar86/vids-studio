@@ -42,8 +42,10 @@ class PublicHelpers(unittest.TestCase):
 
     def test_wrong_client_profile_cannot_launch_mcp(self):
         with tempfile.TemporaryDirectory() as tmp:
-            Path(tmp, "profile.json").write_text('{"id":"codex"}')
-            result = subprocess.run(["node", str(ROOT / "scripts/vids_call.mjs"), "vids_status"], env={**os.environ, "VIDS_CLAUDE_BRIDGE": tmp}, capture_output=True, text=True, timeout=10)
+            expected = "codex" if ROOT.name == "google-vids" else "claude"
+            wrong = "claude" if expected == "codex" else "codex"
+            Path(tmp, "profile.json").write_text(json.dumps({"id": wrong}))
+            result = subprocess.run(["node", str(ROOT / "scripts/vids_call.mjs"), "vids_status"], env={**os.environ, f"VIDS_{expected.upper()}_BRIDGE": tmp}, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 2)
             self.assertIn('No fallback profile', result.stderr)
             self.assertNotIn(tmp, result.stderr)

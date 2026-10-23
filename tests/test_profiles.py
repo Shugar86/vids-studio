@@ -33,6 +33,7 @@ class ProfileBuildTests(unittest.TestCase):
             'skill/google-vids/agents/openai.yaml': 'display_name: Vids Studio',
             'skill/google-vids/references/workflow.md': 'Shared creative workflow',
             'skill/google-vids/scripts/review.py': '# shared helper\n',
+            'skill/google-vids/assets/shared.html': '<p>Shared layer preview</p>',
             'skill/vids-director/SKILL.md': 'Claude wrapper',
             'skill/vids-director/references/vids-operations.md': 'Claude operations',
             'skill/vids-director/references/workflow.md': 'Outdated duplicate',
@@ -98,8 +99,16 @@ class ProfileBuildTests(unittest.TestCase):
         skill = plan['target'] / 'skill/vids-director'
         self.assertEqual((skill / 'SKILL.md').read_text(), 'Claude wrapper')
         self.assertEqual((skill / 'references/workflow.md').read_text(), 'Shared creative workflow')
-        for name in ('assets/layers.html', 'scripts/qa_export.py', 'tests/test_qa_export.py'):
+        for name in ('assets/layers.html', 'assets/shared.html', 'scripts/qa_export.py', 'tests/test_qa_export.py'):
             self.assertTrue((skill / name).is_file(), name)
+
+    def test_both_profiles_receive_shared_helpers_and_assets_with_their_own_wrapper(self):
+        for profile, name in (('codex', 'google-vids'), ('claude', 'vids-director')):
+            plan = self.plan(profile); build.write(plan)
+            skill = plan['target'] / 'skill' / name
+            self.assertEqual((skill / 'scripts/review.py').read_text(), '# shared helper\n')
+            self.assertEqual((skill / 'assets/shared.html').read_text(), '<p>Shared layer preview</p>')
+            self.assertEqual((skill / 'SKILL.md').read_text(), profile.capitalize() + ' wrapper')
 
     def test_shared_skill_corpus_updates_wrapper_and_preserves_unmanaged_client_files(self):
         plan = self.plan(); build.write(plan)

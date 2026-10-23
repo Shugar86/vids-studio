@@ -32,6 +32,10 @@ the same creative and evidence requirements.
 - Resolve scripts/references from this skill directory. Shared helpers operate on
   local material and do not install runtimes or models. Keep project history and
   capabilities in the authorized workspace, out of reusable skill files.
+- Montage, layer rendering, website capture, subtitle and frame-cut QA helpers are
+  shared with Claude: [English tools](references/en/client-tools.md) /
+  [инструменты](references/client-tools.md). The optional montage CLI uses this
+  profile's MCP with this task's explicit assignment; it grants no extra authority.
 
 По-русски: этот профиль — `google-vids`; общий workflow выбирает справку по режиссуре,
 генерации, речи и QA. Управление — только своим токеном через Vids MCP в фоне.

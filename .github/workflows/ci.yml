@@ -65,6 +65,7 @@ jobs:
         run: |
           # Playwright's --with-deps has already refreshed the package index.
           sudo apt-get install -y --no-install-recommends ffmpeg
+          python3 -m pip install Pillow==12.1.1
       - name: Check committed profile and run source tests
         run: |
           python3 scripts/build_profiles.py --profile codex --target . --check
@@ -148,4 +149,6 @@ jobs:
           python -m unittest discover -s tests -p 'backend_platform.py'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/platform_smoke.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s skill/google-vids/tests -p test_media_guard.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

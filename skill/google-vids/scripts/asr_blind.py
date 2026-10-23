@@ -12,12 +12,20 @@ words) and .report.json.
 """
 import argparse
 import difflib
+import importlib.util
 import json
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+if "vids_media_guard" not in sys.modules:
+    _spec = importlib.util.spec_from_file_location("vids_media_guard", Path(__file__).with_name("media_guard.py"))
+    _guard = importlib.util.module_from_spec(_spec)
+    sys.modules[_spec.name] = _guard
+    _spec.loader.exec_module(_guard)
+media_budget = sys.modules["vids_media_guard"].media_budget
+media_tool = sys.modules["vids_media_guard"].media_tool
 
 CACHE = Path.home() / ".cache/hyperframes/whisper"
 
@@ -53,7 +61,7 @@ def main():
     for path, what in ((args.whisper_cli, "whisper.cpp CLI"), (model, "model")):
         if not path.is_file():
             raise ValueError(f"{what} not found at {path}; pass an existing one — nothing is installed")
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = media_tool("ffmpeg")
     if not ffmpeg:
         raise ValueError("ffmpeg is not available")
     prefix = args.out.expanduser().resolve()
@@ -61,15 +69,15 @@ def main():
     out = {n: Path(f"{prefix}.{n}") for n in names}
     if any(p.exists() for p in out.values()):
         raise ValueError(f"Outputs for prefix {prefix} already exist; choose a fresh --out")
-    prefix.parent.mkdir(parents=True, exist_ok=True)
-
     cut = ["-ss", str(args.offset)] + (["-t", str(args.duration)] if args.duration else [])
-    subprocess.run([ffmpeg, "-nostdin", "-v", "error", "-threads", "2", "-protocol_whitelist", "file,pipe", "-i", str(source), *cut, "-map", "0:a:0",
-                    "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(out["wav"])], check=True)
     split = ["-ml", str(args.caption_chars), "-sow"] if args.caption_chars > 0 else []
-    subprocess.run([str(args.whisper_cli), "-m", str(model), "-f", str(out["wav"]), "-l", args.language,
-                    "-t", str(args.threads), "-p", "1", "-ng", *split, "-ojf", "-otxt", "-of", str(prefix)],
-                   check=True, capture_output=True)
+    with media_budget("asr-blind") as guard:
+        prefix.parent.mkdir(parents=True, exist_ok=True)
+        guard.run([ffmpeg, "-nostdin", "-v", "error", "-threads", "2", "-protocol_whitelist", "file,pipe", "-i", str(source), *cut, "-map", "0:a:0",
+                   "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(out["wav"])], check=True, timeout=600)
+        guard.run([str(args.whisper_cli), "-m", str(model), "-f", str(out["wav"]), "-l", args.language,
+                   "-t", str(args.threads), "-p", "1", "-ng", *split, "-ojf", "-otxt", "-of", str(prefix)],
+                  check=True, capture_output=True, timeout=1800)
 
     segments = json.loads(out["json"].read_text(encoding="utf-8"))["transcription"]
     # Per-word times from tokens: a token starting with a space opens a word. Approximate (±0.3 s).
@@ -132,6 +140,8 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except subprocess.CalledProcessError as error:
         print(f"Error: {Path(error.cmd[0]).name} failed ({error.returncode}); use a fresh --out", file=sys.stderr)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+    except subprocess.TimeoutExpired:
+        print("Error: ASR timed out; children were settled before budget release; use a fresh --out", file=sys.stderr)
+    except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError) as error:
         print(f"Error: {error}", file=sys.stderr)
     raise SystemExit(1)

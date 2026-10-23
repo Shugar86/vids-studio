@@ -6,13 +6,21 @@ Findings point at moments worth looking at. They are measurements, not
 listening, not a judgement of the idea, and not a score.
 """
 import argparse
+import importlib.util
 import json
 import re
-import shutil
 import statistics
 import subprocess
 import sys
 from pathlib import Path
+
+if "vids_media_guard" not in sys.modules:
+    _spec = importlib.util.spec_from_file_location("vids_media_guard", Path(__file__).with_name("media_guard.py"))
+    _guard = importlib.util.module_from_spec(_spec)
+    sys.modules[_spec.name] = _guard
+    _spec.loader.exec_module(_guard)
+media_budget = sys.modules["vids_media_guard"].media_budget
+media_tool = sys.modules["vids_media_guard"].media_tool
 
 PROFILES = {
     # Approximate overlay zones of Reels/Shorts/TikTok UI; verify per platform.
@@ -38,12 +46,13 @@ GENERATOR_TOL = 0.25
 THREADS = ["-threads", "2", "-filter_threads", "2"]  # stay light on the user's machine
 
 
-def run(cmd):
-    if cmd and Path(cmd[0]).name == "ffmpeg":
+def run(cmd, guard, kind):
+    # The executable may have a user-pinned filename, including spaces or .exe.
+    # Protocol and thread guards follow the tool's role, not its basename.
+    if kind == "ffmpeg":
         cmd = cmd[:1] + THREADS + cmd[1:]
-    if cmd and Path(cmd[0]).name in {"ffmpeg", "ffprobe"}:
-        cmd = cmd[:1] + ["-protocol_whitelist", "file,pipe"] + cmd[1:]
-    return subprocess.run(cmd, text=True, capture_output=True)
+    cmd = cmd[:1] + ["-protocol_whitelist", "file,pipe"] + cmd[1:]
+    return guard.run(cmd, text=True, capture_output=True, check=True, timeout=600)
 
 
 def rolling_mean(points, window):
@@ -69,8 +78,8 @@ def runs(points, predicate, step):
     return spans
 
 
-def probe(path, ffprobe):
-    data = json.loads(run([ffprobe, "-v", "error", "-show_format", "-show_streams", "-of", "json", str(path)]).stdout)
+def probe(path, ffprobe, guard):
+    data = json.loads(run([ffprobe, "-v", "error", "-show_format", "-show_streams", "-of", "json", str(path)], guard, "ffprobe").stdout)
     video = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
     if not video:
         raise ValueError("No video stream")
@@ -84,9 +93,9 @@ def probe(path, ffprobe):
     }
 
 
-def loudness(path, ffmpeg):
+def loudness(path, ffmpeg, guard):
     out = run([ffmpeg, "-nostdin", "-hide_banner", "-nostats", "-i", str(path), "-map", "0:a:0",
-               "-af", "ebur128=peak=true", "-f", "null", "-"]).stderr
+               "-af", "ebur128=peak=true", "-f", "null", "-"], guard, "ffmpeg").stderr
     series = []
     for line in out.splitlines():
         m = re.search(r"\bt:\s*([\d.]+).*?\bM:\s*(-?inf|-?[\d.]+)", line)
@@ -99,13 +108,13 @@ def loudness(path, ffmpeg):
             "true_peak": grab(r"Peak:\s*(-?[\d.]+) dBFS"), "momentary": series}
 
 
-def frame_metrics(path, ffmpeg, scene):
+def frame_metrics(path, ffmpeg, scene, guard):
     """Per-frame scene score or mean abs difference from the previous frame."""
     chain = ("scale=270:480,select='gte(scene\\,0)',metadata=print:key=lavfi.scene_score" if scene else
              "scale=270:480,format=gray,tblend=all_mode=difference,signalstats,"
              "metadata=print:key=lavfi.signalstats.YAVG")
     out = run([ffmpeg, "-nostdin", "-hide_banner", "-nostats", "-i", str(path), "-an", "-vf", chain,
-               "-f", "null", "-"]).stderr
+               "-f", "null", "-"], guard, "ffmpeg").stderr
     values, t = [], None
     for line in out.splitlines():
         m = re.search(r"pts_time:([\d.]+)", line)
@@ -137,17 +146,17 @@ def boundaries(diffs, scenes):
     return merged
 
 
-def sheet(ffmpeg, src, out, start, end, fps, cols, rows, size, extra=""):
+def sheet(ffmpeg, src, out, start, end, fps, cols, rows, size, guard, extra=""):
     vf = (f"trim=start={start:.3f}:end={end:.3f},fps={fps},scale={size},{extra}"
           "drawtext=text='%{pts\\:hms}':x=6:y=6:fontsize=20:fontcolor=yellow:box=1:boxcolor=black@0.7,"
           f"tile={cols}x{rows}:padding=4:color=gray")
-    result = run([ffmpeg, "-nostdin", "-v", "error", "-i", str(src), "-vf", vf, "-frames:v", "1", "-update", "1", str(out)])
+    result = run([ffmpeg, "-nostdin", "-v", "error", "-i", str(src), "-vf", vf, "-frames:v", "1", "-update", "1", str(out)], guard, "ffmpeg")
     if result.returncode:
         raise RuntimeError(f"ffmpeg sheet failed: {result.stderr.strip()[:400]}")
     return out
 
 
-def safe_zone_sheet(ffmpeg, src, out, times, info, unsafe):
+def safe_zone_sheet(ffmpeg, src, out, times, info, unsafe, guard):
     frame_ids = "+".join(f"eq(n\\,{round(t * info['fps'])})" for t in times)
     boxes = ",".join([
         f"drawbox=x=0:y=0:w=iw:h=ih*{unsafe['top']}:color=red@0.35:t=fill",
@@ -158,7 +167,7 @@ def safe_zone_sheet(ffmpeg, src, out, times, info, unsafe):
     vf = (f"select='{frame_ids}',scale=432:768,{boxes},"
           "drawtext=text='%{pts\\:hms}':x=6:y=6:fontsize=22:fontcolor=yellow:box=1:boxcolor=black@0.7,"
           f"tile={len(times)}x1:padding=6:color=gray")
-    result = run([ffmpeg, "-nostdin", "-v", "error", "-i", str(src), "-vf", vf, "-frames:v", "1", "-update", "1", str(out)])
+    result = run([ffmpeg, "-nostdin", "-v", "error", "-i", str(src), "-vf", vf, "-frames:v", "1", "-update", "1", str(out)], guard, "ffmpeg")
     if result.returncode:
         raise RuntimeError(f"ffmpeg safe-zone sheet failed: {result.stderr.strip()[:400]}")
     return out
@@ -174,7 +183,7 @@ def main():
     parser.add_argument("--out", required=True, type=Path, help="New or empty directory for sheets and findings")
     parser.add_argument("--profile", choices=sorted(PROFILES), default="social")
     args = parser.parse_args()
-    ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
+    ffmpeg, ffprobe = media_tool("ffmpeg"), media_tool("ffprobe")
     if not ffmpeg or not ffprobe:
         print("Error: ffmpeg/ffprobe must already be installed; this script installs nothing", file=sys.stderr)
         return 1
@@ -183,9 +192,14 @@ def main():
     if out.exists() and any(out.iterdir()):
         print(f"Error: {out} is not empty; choose a fresh --out", file=sys.stderr)
         return 1
+    with media_budget("qa-export") as guard:
+        return analyze(args, src, out, ffmpeg, ffprobe, guard)
+
+
+def analyze(args, src, out, ffmpeg, ffprobe, guard):
     (out / "sheets").mkdir(parents=True, exist_ok=True)
     profile = PROFILES[args.profile]
-    info = probe(src, ffprobe)
+    info = probe(src, ffprobe, guard)
     dur = info["duration"]
     findings = []
 
@@ -199,7 +213,7 @@ def main():
     if not info["audio"]:
         add("высокий", "весь ролик", "В файле нет аудиодорожки.", "Проверь экспорт и дорожки в Vids.")
     else:
-        audio = loudness(src, ffmpeg)
+        audio = loudness(src, ffmpeg, guard)
         i_lufs = audio["integrated"]
         series = audio["momentary"]
         active = [t for t, m in series if m >= i_lufs - ACTIVE_BELOW]
@@ -236,8 +250,8 @@ def main():
                 "Риск перегруза после перекодирования площадкой.")
 
     # --- picture -----------------------------------------------------------
-    diffs = frame_metrics(src, ffmpeg, scene=False)
-    scenes = frame_metrics(src, ffmpeg, scene=True)
+    diffs = frame_metrics(src, ffmpeg, scene=False, guard=guard)
+    scenes = frame_metrics(src, ffmpeg, scene=True, guard=guard)
     cuts = boundaries(diffs, scenes)
     edges = [0.0] + cuts + [dur]
     shots = [(a, b) for a, b in zip(edges, edges[1:]) if b - a > 0.2]
@@ -285,18 +299,18 @@ def main():
     page = 0
     while page * page_len < dur:
         a, b = page * page_len, min(dur, (page + 1) * page_len)
-        made.append(sheet(ffmpeg, src, out / "sheets" / f"timeline_{page + 1:02d}.png", a, b, 2, cols, 3, size))
+        made.append(sheet(ffmpeg, src, out / "sheets" / f"timeline_{page + 1:02d}.png", a, b, 2, cols, 3, size, guard))
         page += 1
-    made.append(sheet(ffmpeg, src, out / "sheets" / "opening_0-3s.png", 0, min(3, dur), 10, cols, 3, size))
-    made.append(sheet(ffmpeg, src, out / "sheets" / "ending_last3s.png", max(0, dur - 3), dur, 10, cols, 3, size))
+    made.append(sheet(ffmpeg, src, out / "sheets" / "opening_0-3s.png", 0, min(3, dur), 10, cols, 3, size, guard))
+    made.append(sheet(ffmpeg, src, out / "sheets" / "ending_last3s.png", max(0, dur - 3), dur, 10, cols, 3, size, guard))
     for n, t in enumerate(cuts, 1):
         made.append(sheet(ffmpeg, src, out / "sheets" / f"transition_{n:02d}_{t:.2f}s.png",
-                          max(0, t - 0.5), min(dur, t + 0.5), 10, 10, 1, size))
+                          max(0, t - 0.5), min(dur, t + 0.5), 10, 10, 1, size, guard))
     if profile["unsafe"] and vertical:
         mids = [(a + b) / 2 for a, b in shots]
         for n in range(0, len(mids), 6):
             made.append(safe_zone_sheet(ffmpeg, src, out / "sheets" / f"safezones_{n // 6 + 1:02d}.png",
-                                        mids[n:n + 6], info, profile["unsafe"]))
+                                        mids[n:n + 6], info, profile["unsafe"], guard))
 
     report = {
         "input": str(src), "profile": args.profile, "probe": info,
@@ -337,6 +351,12 @@ def main():
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except subprocess.CalledProcessError as error:
+        print(f"Error: {Path(error.cmd[0]).name} failed ({error.returncode}); use a fresh --out", file=sys.stderr)
+        raise SystemExit(1)
+    except subprocess.TimeoutExpired:
+        print("Error: media analysis timed out; children were settled before budget release; use a fresh --out", file=sys.stderr)
+        raise SystemExit(1)
     except (OSError, ValueError, RuntimeError, KeyError, AttributeError, json.JSONDecodeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         raise SystemExit(1)

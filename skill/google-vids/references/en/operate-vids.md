@@ -1,5 +1,8 @@
 # Operate the attached Vids interface
 
+For repeatable montage operations, see the shared [montage helper](client-tools.md#montage-in-the-assigned-video). It uses the same MCP guards and this task’s own binding.
+
+
 For each attached video in the current profile, first [bind this task to its document](parallel-sessions.md). `vids_status` without sessionId returns a list and does not choose a tab; diagnostics and every action address the exact session.
 
 ## Connection, ownership and background work

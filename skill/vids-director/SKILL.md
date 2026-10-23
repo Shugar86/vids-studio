@@ -28,7 +28,7 @@ same direction, take acceptance and QA criteria.
   Read [parallel sessions](references/en/parallel-sessions.md) /
   [параллельные сессии](references/parallel-sessions.md) for binding recovery,
   capacity receipts and the shared monitor. Never choose the first/free tab.
-- Preserved Claude helpers for layers, website captures, captions and QA are in
+- Shared montage, layer, website-capture, caption and frame-cut QA helpers are in
   [English client tools](references/en/client-tools.md) /
   [инструменты Claude](references/client-tools.md). They complement the common
   corpus; they do not relax evidence, authorization or unknown-outcome handling.

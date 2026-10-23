@@ -184,7 +184,7 @@ def materialization(source, target, profile):
     # have a single source and deliberately override matching wrapper copies.
     selected_skill = skill_files(source, definition['skillName'])
     for relative, value in skill_files(source, 'google-vids').items():
-        if relative.startswith(('references/', 'scripts/', 'tests/')):
+        if relative.startswith(('references/', 'scripts/', 'tests/', 'assets/')):
             selected_skill[relative] = value
     for relative, value in selected_skill.items():
         files[f'skill/{definition["skillName"]}/{relative}'] = value

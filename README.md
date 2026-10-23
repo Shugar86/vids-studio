@@ -33,6 +33,8 @@ The **0.4 preview** supports several explicitly attached documents per client, a
 
 The archives below include these changes. Ten parallel `codex exec` processes passed isolated-browser acceptance; live multi-film editing in Google Vids remains a separate check. [What was tested and on which build](docs/en/testing.md#parallel-agent-acceptance).
 
+Source builds from `main` also give both profiles the same [montage and media tools](https://github.com/Shugar86/vids-studio/blob/main/skill/google-vids/references/en/client-tools.md): scenes and transitions, PNG layers, website capture, SRT, blind ASR and frame-cut review. These additions are not yet in the published v0.4.0 ZIP files; see the [changelog](CHANGELOG.md).
+
 ## Watch a real edit
 
 <p align="center">
