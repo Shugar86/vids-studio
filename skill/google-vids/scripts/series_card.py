@@ -12,6 +12,7 @@ plan, not the rendered pixels. `topic` prints one plan row with its format rule 
 import argparse
 from collections import Counter
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -67,7 +68,56 @@ def generic_hits(text, vocab):
 
 
 def span(beat):
-    return float(beat["t"][0]), float(beat["t"][1])
+    values = beat["t"]
+    if not isinstance(values, list) or len(values) != 2 or any(
+            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values):
+        raise ValueError("t must contain exactly two finite numbers")
+    return float(values[0]), float(values[1])
+
+
+def card_shape_errors(card):
+    """Reject malformed agent-produced fields before editorial rules inspect them."""
+    if not isinstance(card, dict):
+        return ["card must be a JSON object"]
+    errors = []
+    groups = {
+        str: ("topic_id", "title", "format", "truth_mode", "world", "spoken_text", "event_on_screen"),
+        dict: ("situation", "opening", "taste", "voices", "truth", "sample", "gates", "budget", "metaphor"),
+        list: ("styles", "beats", "generation", "graphics", "avoid"),
+    }
+    for expected, fields in groups.items():
+        for field in fields:
+            if field in card and not isinstance(card[field], expected):
+                errors.append(f"{field} must be {expected.__name__}")
+    for field in ("styles", "avoid"):
+        if isinstance(card.get(field), list) and any(not isinstance(v, str) for v in card[field]):
+            errors.append(f"{field} must contain strings")
+    for field in ("beats", "generation", "graphics"):
+        if not isinstance(card.get(field), list):
+            continue
+        for i, item in enumerate(card[field], 1):
+            if not isinstance(item, dict):
+                errors.append(f"{field}[{i}] must be an object")
+                continue
+            if field == "beats":
+                if "shot" in item and not isinstance(item["shot"], str):
+                    errors.append(f"beat {i}: shot must be a string")
+                if "hero" in item and not isinstance(item["hero"], bool):
+                    errors.append(f"beat {i}: hero must be a boolean")
+                if "changes" in item and not isinstance(item["changes"], list):
+                    errors.append(f"beat {i}: changes must be an array")
+            if field == "generation" and "spec" in item and not isinstance(item["spec"], dict):
+                errors.append(f"take {i}: spec must be an object")
+    if isinstance(card.get("sample"), dict) and not isinstance(card["sample"].get("beats", []), list):
+        errors.append("sample.beats must be an array")
+    for key in ("opening_exception", "length_exception", "duration_exception"):
+        if key in card and (not isinstance(card[key], str) or not card[key].strip()):
+            errors.append(f"{key} must contain a written reason")
+    if isinstance(card.get("budget"), dict):
+        for key, value in card["budget"].items():
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                errors.append(f"budget.{key} must be a nonnegative integer")
+    return errors
 
 
 def slideshow_risk(beats, total, generic_vocab):
@@ -119,7 +169,11 @@ def slideshow_risk(beats, total, generic_vocab):
 
 
 def check(card, kit, recent=()):
-    errors, warnings = [], []
+    errors, warnings = card_shape_errors(card), []
+    if errors:
+        return errors, warnings, None
+    if any(not isinstance(prev, dict) for prev in recent):
+        return ["recent cards must be JSON objects"], warnings, None
     for key in REQUIRED:
         if key not in card or card[key] in ("", None) or (key in ("beats", "styles") and not card[key]):
             errors.append(f"missing field {key}")
@@ -306,11 +360,11 @@ def main():
             return 0
         card = read_json(args.card)
         errors, warnings, risk = check(card, kit, [read_json(p) for p in args.recent])
-    except (ValueError, KeyError, OSError, json.JSONDecodeError) as exc:
+    except (ValueError, KeyError, OSError, TypeError, AttributeError) as exc:
         print(f"series_card: {exc}", file=sys.stderr)
         return 2
     if args.json:
-        print(json.dumps({"topic_id": card.get("topic_id"), "errors": errors, "warnings": warnings,
+        print(json.dumps({"topic_id": card.get("topic_id") if isinstance(card, dict) else None, "errors": errors, "warnings": warnings,
                           "slideshow_risk": risk}, ensure_ascii=False, indent=1))
     else:
         for e in errors:
@@ -319,7 +373,8 @@ def main():
             print("warning:", w)
         if risk:
             print(f"slideshow risk: {risk['average']} ({risk['verdict']})")
-        print(f"{card.get('topic_id', '?')}: {len(errors)} errors, {len(warnings)} warnings")
+        label = card.get("topic_id", "?") if isinstance(card, dict) else "?"
+        print(f"{label}: {len(errors)} errors, {len(warnings)} warnings")
     return 1 if errors else 0
 
 

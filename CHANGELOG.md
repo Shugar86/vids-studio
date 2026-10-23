@@ -1,6 +1,9 @@
 # Changelog · История изменений
 
-## Unreleased — shared production helpers / общие инструменты производства
+## Unreleased — series production and export recovery / серии и восстановление экспорта
+
+- The episode checker reports malformed card fields, invalid budgets and non-finite timestamps as errors. RU/EN README and demo page introduce the series kit, card and six-stage workflow.
+- Проверка карточки выдаёт понятные ошибки для неверных типов полей, бюджета и некорректного времени. README и демостраница RU/EN представляют набор серии, карточку и шесть этапов производства.
 
 - Series production for channels run from a topic plan: a method reference (RU/EN), a series kit template, an episode card and `series_card.py`, which checks the card against the kit and scores slideshow risk on the plan. Stages S1–S6 with gates, roles and per-episode budgets. Ideas from OpenMontage are credited; no code was copied.
 - Производство серии по плану тем: справочник метода (RU/EN), шаблон набора серии, карточка выпуска и `series_card.py`, который проверяет карточку по набору и оценивает риск слайдшоу по плану. Стадии S1–S6 с воротами, роли и бюджет выпуска. Идеи OpenMontage указаны с источником; код не переносился.

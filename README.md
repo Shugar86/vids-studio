@@ -2,7 +2,7 @@
   <img src="docs/assets/hero.svg" alt="Vids Studio — create in Google Vids with Codex or Claude Code" width="100%">
 </p>
 
-<p align="center"><strong>Give your agent a brief. Build and refine an editable video in Google Vids.</strong><br>Creative skills, a local MCP connector, and Chrome extensions for Codex and Claude Code.</p>
+<p align="center"><strong>One video or a whole series. From an idea to an editable Google Vids project.</strong><br>Creative skills, a local MCP connector, and Chrome extensions for Codex and Claude Code.</p>
 
 <p align="center"><strong>English</strong> · <a href="README.ru.md">Русский</a></p>
 
@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-a8e4d0" alt="Windows, macOS and Linux">
 </p>
 
-<p align="center"><a href="https://shugar86.github.io/vids-studio/">Watch the demo</a> · <a href="#start-here">Install</a> · <a href="#what-you-can-do">Use cases</a> · <a href="#how-it-works">How it works</a> · <a href="docs/en/usage.md">Guide</a></p>
+<p align="center"><a href="https://shugar86.github.io/vids-studio/">Watch the demo</a> · <a href="#start-here">Install</a> · <a href="#from-one-video-to-a-series">Series</a> · <a href="#what-you-can-do">Use cases</a> · <a href="#how-it-works">How it works</a> · <a href="docs/en/usage.md">Guide</a></p>
 
 ## Your video, still in the editor
 
@@ -34,6 +34,38 @@ The **0.4 preview** supports several explicitly attached documents per client, a
 The archives below include these changes. Ten parallel `codex exec` processes passed isolated-browser acceptance; live multi-film editing in Google Vids remains a separate check. [What was tested and on which build](docs/en/testing.md#parallel-agent-acceptance).
 
 Source builds from `main` also give both profiles the same [montage and media tools](https://github.com/Shugar86/vids-studio/blob/main/skill/google-vids/references/en/client-tools.md): scenes and transitions, PNG layers, website capture, SRT, blind ASR and frame-cut review. These additions are not yet in the published v0.4.0 ZIP files; see the [changelog](CHANGELOG.md).
+
+## From one video to a series
+
+**New on `main`: a series kit and an episode card checker.** Define shared formats, worlds and limits, then give every episode its own event: a character's desire, obstacle, turn and final image. Codex and Claude follow the same method.
+
+| Prepare | What it gives you |
+| --- | --- |
+| **A series kit** | Format rules, visual worlds, duration and generation budgets. [Open the template →](skill/google-vids/assets/series-kit/) |
+| **An episode card** | On-screen action, shots, speech, sound and a sample to prove first. [Explore the example →](skill/google-vids/assets/series-kit/example.card.json) |
+| **A check before generation** | Timing errors, budget overruns, repetition and the risk of turning a story into a slideshow. [Read the method →](skill/google-vids/references/en/series-production.md) |
+
+**Situation → card → keyframes → sample → Vids assembly → final critique.** Every stage produces something to review; generation and revision rounds have explicit budgets. The card checker runs locally and generates no media.
+
+<details><summary><strong>Try the example without connecting to Google</strong></summary>
+
+From the source repository root:
+
+```sh
+python3 -I skill/google-vids/scripts/series_card.py check \
+  skill/google-vids/assets/series-kit/example.card.json \
+  --kit skill/google-vids/assets/series-kit --json
+```
+
+The report contains errors, warnings and a plan-level risk score. Exit code `1` means card errors; `2` means an input-reading problem. Warnings need an editorial decision. A good plan score does not establish video quality.
+
+</details>
+
+An example brief for your agent:
+
+> Prepare five short episodes from my topic plan. Start with a series kit and episode cards. Give each an event and a turn. Check the cards, show warnings and propose samples before full generation. For parallel editing, use only the document assigned to each chat.
+
+The method does not launch agents or purchase generations by itself. Set up parallel attachments [separately](docs/en/parallel.md). The example card adapts the public demo; it is a teaching plan, not a newly produced film. This addition is available in source builds from `main`; the published v0.4.0 ZIP files are unchanged.
 
 ## Watch a real edit
 

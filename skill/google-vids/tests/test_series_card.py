@@ -125,6 +125,38 @@ class CardRules(unittest.TestCase):
         self.assertTrue(any("was used in P021" in e for e in errors_of(self.card, [prev])))
 
 
+class MalformedCards(unittest.TestCase):
+    def test_wrong_shapes_return_errors_without_scoring(self):
+        cases = [None, [], dict(EXAMPLE, beats=[None]), dict(EXAMPLE, styles=[{}]),
+                 dict(EXAMPLE, taste=[]), dict(EXAMPLE, generation=[{"spec": []}]),
+                 dict(EXAMPLE, beats=[{"shot": {}}]), dict(EXAMPLE, sample={"beats": None})]
+        for card in cases:
+            with self.subTest(card=card):
+                errors, _, risk = series.check(card, KIT)
+                self.assertTrue(errors)
+                self.assertIsNone(risk)
+
+    def test_nonfinite_or_wrong_timestamps_cannot_bypass_checks(self):
+        for times in ([0, float("nan")], [0, float("inf")], [False, 6.2], [0, 6.2, 9], ["0", "6.2"]):
+            card = copy.deepcopy(EXAMPLE)
+            card["beats"][0]["t"] = times
+            card["duration_exception"] = "Intentional longer episode"
+            self.assertTrue(any("t must be" in e for e in errors_of(card)))
+
+    def test_budget_and_exceptions_need_real_values(self):
+        for value in (True, -1, "6", float("nan")):
+            card = copy.deepcopy(EXAMPLE)
+            card["budget"]["video_generations"] = value
+            self.assertTrue(any("budget.video_generations" in e for e in errors_of(card)))
+        for reason in (True, 1, " "):
+            self.assertTrue(any("written reason" in e for e in errors_of(dict(EXAMPLE, duration_exception=reason))))
+
+    def test_hero_flag_is_not_a_truthy_string(self):
+        card = copy.deepcopy(EXAMPLE)
+        card["beats"][0]["hero"] = "false"
+        self.assertTrue(any("boolean" in e for e in errors_of(card)))
+
+
 class SlideshowRisk(unittest.TestCase):
     def test_slide_deck_plan_fails(self):
         beats = [{"t": [i * 4, i * 4 + 4], "kind": "graphic" if i % 2 else "scene", "shot": "medium",
@@ -149,6 +181,16 @@ class Cli(unittest.TestCase):
             bad.write_text(json.dumps(card, ensure_ascii=False), encoding="utf-8")
             self.assertEqual(self.run_cli("check", str(bad), "--kit", str(KIT_DIR)).returncode, 1)
             self.assertEqual(self.run_cli("check", str(bad), "--kit", tmp).returncode, 2)
+
+    def test_malformed_json_card_has_machine_readable_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "card.json"
+            for value in ([], None, dict(EXAMPLE, beats=[None])):
+                path.write_text(json.dumps(value), encoding="utf-8")
+                run = self.run_cli("check", str(path), "--kit", str(KIT_DIR), "--json")
+                self.assertEqual(run.returncode, 1, run.stderr)
+                self.assertTrue(json.loads(run.stdout)["errors"])
+                self.assertNotIn("Traceback", run.stderr)
 
     def test_topic_row_gets_the_kit_rule(self):
         with tempfile.TemporaryDirectory() as tmp:
